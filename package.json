@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "dev": "npm run client:dev",
     "dev:setup": "npm run db:seed && npm run blockchain:deploy:ganache && npm run dev",
     "blockchain:deploy": "npx hardhat run scripts/deploy.js",
     "blockchain:deploy:ganache": "npx hardhat run scripts/deploy.js --network ganache",

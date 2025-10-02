@@ -19,26 +19,23 @@ class IPFSService {
     }
   }
 
-  async uploadFile(fileBuffer, fileName) {
+  async uploadFile(fileBuffer, originalName) {
+    // fileBuffer is a Buffer
     try {
-      // Using a simple approach with a free IPFS service
-      // For production, you might want to use Web3.Storage or similar free services
-      
-      // Simulate IPFS upload by creating a hash-like identifier
-      // In a real implementation, you would use a free service like Web3.Storage
-      const hash = this.generateHash(fileBuffer, fileName);
-      
-      // Store file locally for demo purposes (in production, use actual IPFS)
+      // Fix: define hash before using it
+      const hash = this.generateHash(fileBuffer);
+
+      // Store file locally (for demo purposes, instead of real IPFS pinning)
       const fs = require('fs');
       const path = require('path');
       const uploadsDir = path.join(__dirname, '../uploads');
-      
+
       if (!fs.existsSync(uploadsDir)) {
         fs.mkdirSync(uploadsDir, { recursive: true });
       }
-      
+
       fs.writeFileSync(path.join(uploadsDir, hash), fileBuffer);
-      
+
       console.log(`File uploaded to IPFS with hash: ${hash}`);
       return hash;
     } catch (error) {
@@ -71,13 +68,13 @@ class IPFSService {
     }
   }
 
-  generateHash(buffer, fileName) {
+  generateHash(data) {
+    if (data instanceof ArrayBuffer) {
+      data = Buffer.from(data);
+    }
     const crypto = require('crypto');
-    const hash = crypto.createHash('sha256');
-    hash.update(buffer);
-    hash.update(fileName);
-    hash.update(Date.now().toString());
-    return 'Qm' + hash.digest('hex').substring(0, 44); // IPFS-like hash format
+    const hash = crypto.createHash("sha256").update(data).digest("hex");
+    return hash;
   }
 
   async downloadFile(hash) {

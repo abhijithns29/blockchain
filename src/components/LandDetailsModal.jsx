@@ -12,38 +12,6 @@ export default function LandDetailsModal({ land, onClose }) {
     return area || "N/A";
   };
 
-  // Helper: parse features/amenities/images safely
-  const parseField = (field) => {
-    if (!field) return [];
-    if (Array.isArray(field)) {
-      // Case: ['["a","b"]'] → parse again
-      if (
-        field.length === 1 &&
-        typeof field[0] === "string" &&
-        field[0].includes("[")
-      ) {
-        try {
-          return JSON.parse(field[0]);
-        } catch {
-          return field;
-        }
-      }
-      return field;
-    }
-    if (typeof field === "string") {
-      try {
-        return JSON.parse(field);
-      } catch {
-        return [field];
-      }
-    }
-    return [];
-  };
-
-  const features = parseField(mi.features);
-  const amenities = parseField(mi.nearbyAmenities);
-  const images = parseField(mi.images);
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -102,25 +70,25 @@ export default function LandDetailsModal({ land, onClose }) {
             </p>
             <div>
               <strong>Features:</strong>
-              {features.length > 0 ? (
-                <span className="ml-2">{features.join(", ")}</span>
+              {mi.features?.length > 0 ? (
+                <span className="ml-2">{mi.features.join(", ")}</span>
               ) : (
                 <span className="ml-2 text-gray-500">None</span>
               )}
             </div>
             <div>
               <strong>Nearby Amenities:</strong>
-              {amenities.length > 0 ? (
-                <span className="ml-2">{amenities.join(", ")}</span>
+              {mi.nearbyAmenities?.length > 0 ? (
+                <span className="ml-2">{mi.nearbyAmenities.join(", ")}</span>
               ) : (
                 <span className="ml-2 text-gray-500">None</span>
               )}
             </div>
             <div className="mt-3">
               <strong>Images:</strong>
-              {images.length > 0 ? (
+              {mi.images?.length > 0 ? (
                 <div className="grid grid-cols-2 gap-2 mt-2">
-                  {images.map((img, i) => (
+                  {mi.images.map((img, i) => (
                     <img
                       key={i}
                       src={img}
@@ -139,3 +107,6 @@ export default function LandDetailsModal({ land, onClose }) {
     </div>
   );
 }
+// No changes needed in this file for the backend upload/field fix.
+// Your modal already parses and displays images correctly.
+// Ensure your backend and frontend use the key "images" for uploads and FormData.

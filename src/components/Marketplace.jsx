@@ -9,15 +9,37 @@ const Marketplace = () => {
     status: '',
     isForSale: ''
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(""); // <-- Add error state
 
   useEffect(() => {
-    fetch("/api/lands/marketplace")
-      .then((r) => r.json())
-      .then((data) => setLands(data.lands ? data.lands : data))
-      .catch((e) => console.error("marketplace fetch error", e));
+    setLoading(true);
+    // ✅ Use full backend URL for fetch, or configure Vite proxy
+    fetch("http://localhost:5000/api/lands/marketplace")
+      .then(async (r) => {
+        const contentType = r.headers.get("content-type");
+        if (!r.ok) {
+          throw new Error("Network response was not ok");
+        }
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await r.text();
+          throw new Error("Server did not return JSON. Response: " + text.slice(0, 100));
+        }
+        return r.json();
+      })
+      .then((data) => {
+        setLands(data.lands ? data.lands : data);
+        setLoading(false);
+        setError("");
+      })
+      .catch((e) => {
+        console.error("marketplace fetch error", e);
+        setError("Failed to load marketplace data. " + e.message);
+        setLoading(false);
+      });
   }, []);
 
-  const handleFilterChange = (key: string, value: string) => {
+  const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
@@ -34,7 +56,7 @@ const Marketplace = () => {
     return matchesSearch && matchesStatus && matchesForSale;
   });
 
-  const formatPrice = (price: number) => {
+  const formatPrice = (price) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
@@ -42,14 +64,14 @@ const Marketplace = () => {
     }).format(price);
   };
 
-  const formatArea = (area: any) => {
+  const formatArea = (area) => {
     if (typeof area === 'object') {
       return `${area.acres || 0} Acres, ${area.guntas || 0} Guntas`;
     }
     return area || 'N/A';
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status) => {
     switch (status) {
       case "AVAILABLE":
         return "bg-green-100 text-green-800";
@@ -66,7 +88,7 @@ const Marketplace = () => {
     }
   };
 
-  const getVerificationColor = (status: string) => {
+  const getVerificationColor = (status) => {
     switch (status) {
       case "VERIFIED":
         return "bg-green-100 text-green-800";
@@ -186,7 +208,12 @@ const Marketplace = () => {
                 <div className="space-y-2 mb-4">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Area:</span>
-                    <span className="font-medium">{formatArea(land.area)}</span>
+                    <span className="font-medium">
+                      {/* Fix: Render area object properties as a readable string */}
+                      {land.size
+                        ? `${land.size.acres || 0} acres, ${land.size.guntas || 0} guntas, ${land.size.sqft || 0} sqft`
+                        : formatArea(land.area)}
+                    </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Type:</span>
@@ -241,11 +268,14 @@ const Marketplace = () => {
 
                 {land.digitalDocument?.isDigitalized && (
                   <div className="mt-3 flex items-center justify-center">
-                    <button
+                    <a
+                      href={`http://localhost:5000/api/lands/${land._id || land.id}/certificate`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="text-sm text-blue-600 hover:text-blue-800 font-medium"
                     >
                       Download Digital Certificate
-                    </button>
+                    </a>
                   </div>
                 )}
               </div>
@@ -274,7 +304,9 @@ const Marketplace = () => {
             <p><strong>Survey Number:</strong> {selectedLandView.surveyNumber}</p>
             <p><strong>Village:</strong> {selectedLandView.village}</p>
             <p><strong>District:</strong> {selectedLandView.district}</p>
-            <p><strong>Area:</strong> {selectedLandView.area}</p>
+            <p><strong>Area:</strong> {selectedLandView.size
+                ? `${selectedLandView.size.acres || 0} acres, ${selectedLandView.size.guntas || 0} guntas, ${selectedLandView.size.sqft || 0} sqft`
+                : formatArea(selectedLandView.area)}</p>
             <p><strong>Type:</strong> {selectedLandView.landType}</p>
             <p><strong>Status:</strong> {selectedLandView.status}</p>
             {selectedLandView.marketInfo && (

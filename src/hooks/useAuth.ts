@@ -1,29 +1,110 @@
-import { useState, useEffect, createContext, useContext } from 'react';
-import { User, AuthState } from '../types';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import apiService from '../services/api';
 
-const AuthContext = createContext<{
-  auth: AuthState;
-  login: (credentials: any) => Promise<void>;
-  register: (userData: any) => Promise<void>;
+interface User {
+  id: string;
+  email: string;
+  role: string;
+  twoFactorEnabled: boolean;
+  isVerified: boolean;
+}
+
+interface AuthContextType {
+  auth: {
+    user: User | null;
+    token: string | null;
+    isAuthenticated: boolean;
+    loading: boolean;
+  };
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  connectWallet: () => Promise<void>;
-} | null>(null);
+  refreshUser: () => Promise<void>; // Ensure this is in interface
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (token) {
+      refreshUser();
+    } else {
+      setLoading(false);
+    }
+  }, [token]);
+
+  const login = async (email: string, password: string) => {
+    try {
+      const response = await apiService.login(email, password);
+      const { token: newToken, user: userData } = response;
+      localStorage.setItem('token', newToken);
+      setToken(newToken);
+      setUser(userData);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+  };
+
+  const refreshUser = async () => {
+    try {
+      setLoading(true);
+      const userData = await apiService.getProfile();
+      setUser(userData);
+    } catch (error) {
+      console.error('Failed to refresh user:', error);
+      logout();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const value = {
+    auth: {
+      user,
+      token,
+      isAuthenticated: !!token && !!user,
+      loading
+    },
+    login,
+    logout,
+    refreshUser // Make sure refreshUser is included in value
+  };
+
+  return React.createElement(AuthContext.Provider, { value }, children);
+};
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 };
 
+// Fix: Export AuthContext for use in other files
+export { AuthContext };
+
+// Fix: Export useAuthProvider for use in other files
 export const useAuthProvider = () => {
-  const [auth, setAuth] = useState<AuthState>({
+  const [auth, setAuth] = useState<{
+    user: User | null;
+    token: string | null;
+    isAuthenticated: boolean;
+    loading: boolean;
+  }>({
     user: null,
     token: null,
     isAuthenticated: false,
-    isLoading: true,
+    loading: true,
   });
 
   useEffect(() => {
@@ -31,91 +112,41 @@ export const useAuthProvider = () => {
     if (token) {
       loadUser();
     } else {
-      setAuth(prev => ({ ...prev, isLoading: false }));
+      setAuth(prev => ({ ...prev, loading: false }));
     }
   }, []);
 
   const loadUser = async () => {
     try {
-      const response = await apiService.getCurrentUser();
+      const response = await apiService.getProfile();
       setAuth({
-        user: response.user,
+        user: response,
         token: localStorage.getItem('token'),
         isAuthenticated: true,
-        isLoading: false,
+        loading: false,
       });
     } catch (error) {
-      console.error('Failed to load user:', error);
       localStorage.removeItem('token');
       setAuth({
         user: null,
         token: null,
         isAuthenticated: false,
-        isLoading: false,
+        loading: false,
       });
     }
   };
 
-  const login = async (credentials: any) => {
+  const login = async (email: string, password: string) => {
     try {
-      const response = await apiService.login(credentials);
+      const response = await apiService.login(email, password);
       localStorage.setItem('token', response.token);
       setAuth({
         user: response.user,
         token: response.token,
         isAuthenticated: true,
-        isLoading: false,
+        loading: false,
       });
     } catch (error) {
-      console.error('Login failed:', error);
-      throw error;
-    }
-  };
-
-  const register = async (userData: any) => {
-    try {
-      const response = await apiService.register(userData);
-      localStorage.setItem('token', response.token);
-      setAuth({
-        user: response.user,
-        token: response.token,
-        isAuthenticated: true,
-        isLoading: false,
-      });
-    } catch (error) {
-      console.error('Registration failed:', error);
-      throw error;
-    }
-  };
-
-  const connectWallet = async () => {
-    try {
-      if (typeof window === 'undefined' || !window.ethereum) {
-        throw new Error('MetaMask is not installed. Please install MetaMask to continue.');
-      }
-      
-      const blockchainService = await import('../services/blockchain');
-      const walletInfo = await blockchainService.default.connectWallet();
-      
-      // Sign a message for verification
-      const message = `Verify wallet ownership: ${Date.now()}`;
-      const signature = await blockchainService.default.signMessage(message);
-
-      const response = await apiService.verifyWallet({
-        walletAddress: walletInfo.address,
-        signature,
-        message,
-      });
-
-      localStorage.setItem('token', response.token);
-      setAuth({
-        user: response.user,
-        token: response.token,
-        isAuthenticated: true,
-        isLoading: false,
-      });
-    } catch (error) {
-      console.error('Wallet connection failed:', error);
       throw error;
     }
   };
@@ -126,17 +157,14 @@ export const useAuthProvider = () => {
       user: null,
       token: null,
       isAuthenticated: false,
-      isLoading: false,
+      loading: false,
     });
   };
 
   return {
     auth,
     login,
-    register,
     logout,
-    connectWallet,
+    loadUser,
   };
 };
-
-export { AuthContext };

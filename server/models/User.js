@@ -276,6 +276,31 @@ userSchema.methods.hasRequiredDocuments = function () {
   return this.documents && this.documents.length > 0;
 };
 
+// Generate backup codes (10 codes, 6 chars each, uppercase)
+userSchema.methods.generateBackupCodes = function () {
+  const codes = [];
+  for (let i = 0; i < 10; i++) {
+    codes.push({
+      code: Math.random().toString(36).substring(2, 8).toUpperCase(),
+      used: false,
+    });
+  }
+  this.twoFactorBackupCodes = codes;
+  return codes.map((c) => c.code);
+};
+
+// Use a backup code (mark as used)
+userSchema.methods.useBackupCode = function (inputCode) {
+  const codeObj = this.twoFactorBackupCodes.find(
+    (c) => c.code === inputCode && !c.used
+  );
+  if (codeObj) {
+    codeObj.used = true;
+    return true;
+  }
+  return false;
+};
+
 // Static methods
 userSchema.statics.findByEmail = function (email) {
   return this.findOne({ email: email.toLowerCase().trim() });

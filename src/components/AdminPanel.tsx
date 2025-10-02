@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Clock, Eye, Users, Database, FileText, ShoppingCart } from 'lucide-react';
-import { Transaction, User, Land } from '../types';
+import { User, Land, Transaction } from '../types';
 import apiService from '../services/api';
 
 const AdminPanel: React.FC = () => {
@@ -132,7 +132,7 @@ const AdminPanel: React.FC = () => {
         </div>
       ) : (
         pendingUsers.map((user) => (
-          <div key={user.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div key={user._id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center space-x-3 mb-4">
@@ -173,26 +173,25 @@ const AdminPanel: React.FC = () => {
 
               <div className="flex flex-col space-y-2 ml-4">
                 <button
-                  onClick={() => handleVerifyUser(user.id, 'VERIFIED')}
-                  disabled={processingId === user.id}
+                  onClick={() => handleVerifyUser(user._id, 'VERIFIED')}
+                  disabled={processingId === user._id}
                   className="inline-flex items-center px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {processingId === user.id ? (
+                  {processingId === user._id ? (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   ) : (
                     <CheckCircle className="h-4 w-4 mr-2" />
                   )}
                   Verify
                 </button>
-
                 <button
                   onClick={() => {
                     const reason = prompt('Please provide a reason for rejection:');
                     if (reason) {
-                      handleVerifyUser(user.id, 'REJECTED', reason);
+                      handleVerifyUser(user._id, 'REJECTED', reason);
                     }
                   }}
-                  disabled={processingId === user.id}
+                  disabled={processingId === user._id}
                   className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <XCircle className="h-4 w-4 mr-2" />

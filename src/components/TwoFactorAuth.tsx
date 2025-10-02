@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Key, Copy, Check, AlertTriangle } from 'lucide-react';
+import { Shield, Key, Copy, Check, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import apiService from '../services/api';
 
 const TwoFactorAuth: React.FC = () => {
-  const { auth } = useAuth();
+  const { auth, refreshUser } = useAuth(); // Destructure refreshUser from useAuth
   const [step, setStep] = useState<'setup' | 'verify' | 'complete'>('setup');
   const [qrCode, setQrCode] = useState('');
   const [secret, setSecret] = useState('');
@@ -24,12 +24,18 @@ const TwoFactorAuth: React.FC = () => {
     try {
       setLoading(true);
       setError('');
-      
+      console.log('Starting 2FA setup...');
       const response = await apiService.setupTwoFactor();
-      setQrCode(response.qrCode);
-      setSecret(response.secret);
-      setStep('verify');
+      if (response.success) {
+        setQrCode(response.qrCode);
+        setSecret(response.secret);
+        setStep('verify');
+        console.log('2FA setup successful, moving to verify step');
+      } else {
+        setError(response.message || 'Failed to setup 2FA');
+      }
     } catch (error: any) {
+      console.error('2FA setup error:', error);
       setError(error.message || 'Failed to setup two-factor authentication');
     } finally {
       setLoading(false);
@@ -46,16 +52,26 @@ const TwoFactorAuth: React.FC = () => {
         return;
       }
 
+      // Only send token
       const response = await apiService.verifyTwoFactor({
-        token: verificationCode,
-        secret
+        token: verificationCode
       });
-      
+
       if (response.success) {
         setBackupCodes(response.backupCodes);
         setStep('complete');
+        
+        try {
+          await refreshUser();
+        } catch (refreshError) {
+          console.error('Failed to refresh user data:', refreshError);
+          // Continue even if refresh fails
+        }
+      } else {
+        setError(response.message || 'Invalid verification code');
       }
     } catch (error: any) {
+      console.error('2FA verification error:', error);
       setError(error.message || 'Invalid verification code');
     } finally {
       setLoading(false);
@@ -66,13 +82,29 @@ const TwoFactorAuth: React.FC = () => {
     try {
       setLoading(true);
       setError('');
-      
-      const confirmCode = prompt('Enter your current 2FA code to disable:');
-      if (!confirmCode) return;
-
-      await apiService.disableTwoFactor({ token: confirmCode });
-      setStep('setup');
+      const confirmCode = prompt('Enter your current 6-digit 2FA code to disable:');
+      if (!confirmCode) {
+        setLoading(false);
+        return;
+      }
+      if (!/^\d{6}$/.test(confirmCode)) {
+        setError('Please enter a valid 6-digit code');
+        setLoading(false);
+        return;
+      }
+      const response = await apiService.disableTwoFactor({ token: confirmCode });
+      if (response.success) {
+        setStep('setup');
+        setQrCode('');
+        setSecret('');
+        setBackupCodes([]);
+        setVerificationCode('');
+        await refreshUser();
+      } else {
+        setError(response.message || 'Failed to disable 2FA');
+      }
     } catch (error: any) {
+      console.error('2FA disable error:', error);
       setError(error.message || 'Failed to disable two-factor authentication');
     } finally {
       setLoading(false);

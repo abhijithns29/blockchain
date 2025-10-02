@@ -1,12 +1,26 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 class ApiService {
-  private async request(endpoint: string, options: RequestInit = {}) {
+  private getAuthHeaders() {
     const token = localStorage.getItem('token');
-    
+    return {
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` })
+    };
+  }
+
+  private async handleResponse(response: Response) {
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || data.error || 'An error occurred');
+    }
+    return data;
+  }
+
+  private async request(endpoint: string, options: RequestInit = {}) {
     const config: RequestInit = {
       headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
+        ...this.getAuthHeaders(),
         ...(!(options.body instanceof FormData) && { 'Content-Type': 'application/json' }),
         ...options.headers,
       },
@@ -15,13 +29,7 @@ class ApiService {
 
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Request failed');
-      }
-
-      return await response.json();
+      return this.handleResponse(response);
     } catch (error) {
       console.error('API request failed:', error);
       throw error;
@@ -413,11 +421,16 @@ class ApiService {
     return this.request('/auth/2fa/setup', { method: 'POST' });
   }
 
-  async verifyTwoFactor(data: any) {
-    return this.request('/auth/2fa/verify', {
+  async verifyTwoFactor(data: { token: string }) {
+    console.log('Verifying 2FA with token:', data.token);
+    const response = await fetch(`${API_BASE_URL}/2fa/verify`, {
       method: 'POST',
-      body: JSON.stringify(data),
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ token: data.token }) // Only send token
     });
+    const result = await this.handleResponse(response);
+    console.log('2FA verify response:', result);
+    return result;
   }
 
   async disableTwoFactor(data: any) {
