@@ -1,9 +1,9 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
-    "D:\\mainproject_blockchain-tril\\contracts\\LandRegistry.sol": {
-      "lastModificationDate": 1757752761519,
-      "contentHash": "8ff15f8118e88a9971742f15d66be1f3",
+    "D:\\projectry\\blockchain\\contracts\\LandRegistry.sol": {
+      "lastModificationDate": 1759382286283,
+      "contentHash": "d5cb621aff36f91a98b3bc5d116bc64a",
       "sourceName": "contracts/LandRegistry.sol",
       "solcConfig": {
         "version": "0.8.19",
