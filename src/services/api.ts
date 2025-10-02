@@ -27,6 +27,11 @@ class ApiService {
       ...options,
     };
 
+    // Remove Content-Type for FormData to let browser set it with boundary
+    if (options.body instanceof FormData) {
+      delete (config.headers as any)['Content-Type'];
+    }
+
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
       return this.handleResponse(response);
@@ -199,6 +204,12 @@ class ApiService {
   async getMyLands() {
     return this.request('/lands/my-lands');
   }
+
+  async getOwnedLandsByUserId(userId: string, params: any = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/lands/owned-by/${userId}${queryString ? `?${queryString}` : ''}`);
+  }
+
 
   async getLandsForSale(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();

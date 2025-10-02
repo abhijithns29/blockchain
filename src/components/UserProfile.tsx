@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   User,
   Mail,
@@ -8,14 +8,46 @@ import {
   Edit2,
   Save,
   X,
+  QrCode,
+  Copy,
+  Map,
+  Calendar,
+  DollarSign,
+  Eye,
+  ShoppingCart,
+  Scissors,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import QRCode from "qrcode";
+import apiService from "../services/api";
 
 const UserProfile: React.FC = () => {
   const { auth } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
+  const [copySuccess, setCopySuccess] = useState(false);
+  const [ownedLands, setOwnedLands] = useState<any[]>([]);
+  const [landsLoading, setLandsLoading] = useState(false);
+  const [showOwnedLands, setShowOwnedLands] = useState(false);
+  const [showSaleModal, setShowSaleModal] = useState(false);
+  const [showPartitionModal, setShowPartitionModal] = useState(false);
+  const [selectedLand, setSelectedLand] = useState<any>(null);
+  const [saleData, setSaleData] = useState({
+    askingPrice: "",
+    description: "",
+    features: "",
+    nearbyAmenities: "",
+  });
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [partitionData, setPartitionData] = useState({
+    partitionType: "partial", // 'partial' or 'whole'
+    partitionArea: "",
+    askingPrice: "",
+    description: "",
+  });
   const [formData, setFormData] = useState({
     fullName: auth.user?.fullName || "",
     email: auth.user?.email || "",
@@ -27,6 +59,158 @@ const UserProfile: React.FC = () => {
       zipCode: auth.user?.profile?.address?.zipCode || "",
     },
   });
+
+  // Generate QR code for user ID
+  useEffect(() => {
+    const generateQRCode = async () => {
+      if (auth.user?.id) {
+        try {
+          const qrUrl = await QRCode.toDataURL(auth.user.id, {
+            width: 200,
+            margin: 2,
+            color: {
+              dark: "#000000",
+              light: "#FFFFFF",
+            },
+          });
+          setQrCodeUrl(qrUrl);
+        } catch (error) {
+          console.error("Error generating QR code:", error);
+        }
+      }
+    };
+
+    generateQRCode();
+  }, [auth.user?.id]);
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (error) {
+      console.error("Failed to copy:", error);
+    }
+  };
+
+  const fetchOwnedLands = async () => {
+    if (!auth.user?.id) {
+      console.log("No user ID available");
+      return;
+    }
+
+    console.log("Fetching owned lands for user:", auth.user.id);
+    setLandsLoading(true);
+    setError(""); // Clear any previous errors
+
+    try {
+      const response = await apiService.getOwnedLandsByUserId(auth.user.id, {
+        limit: 10,
+      });
+      console.log("Owned lands response:", response);
+      setOwnedLands(response.lands || []);
+    } catch (error) {
+      console.error("Error fetching owned lands:", error);
+      setError(
+        `Failed to load owned lands: ${error.message || "Unknown error"}`
+      );
+    } finally {
+      setLandsLoading(false);
+    }
+  };
+
+  const toggleOwnedLands = () => {
+    if (!showOwnedLands && ownedLands.length === 0) {
+      fetchOwnedLands();
+    }
+    setShowOwnedLands(!showOwnedLands);
+  };
+
+  const handleListForSale = (land: any) => {
+    setSelectedLand(land);
+    setSaleData({
+      askingPrice: "",
+      description: "",
+      features: "",
+      nearbyAmenities: "",
+    });
+    setSelectedImages([]);
+    setShowSaleModal(true);
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length + selectedImages.length > 7) {
+      setError("Maximum 7 images allowed");
+      return;
+    }
+    setSelectedImages([...selectedImages, ...files]);
+  };
+
+  const removeImage = (index: number) => {
+    setSelectedImages(selectedImages.filter((_, i) => i !== index));
+  };
+
+  const handlePartitionLand = (land: any) => {
+    setSelectedLand(land);
+    setPartitionData({
+      partitionType: "partial",
+      partitionArea: "",
+      askingPrice: "",
+      description: "",
+    });
+    setShowPartitionModal(true);
+  };
+
+  const handleSaleSubmit = async () => {
+    if (!selectedLand || !saleData.askingPrice) return;
+
+    try {
+      setLoading(true);
+      const response = await apiService.listLandForSale(
+        selectedLand._id,
+        saleData,
+        selectedImages
+      );
+      console.log("Land listed for sale:", response);
+
+      // Refresh the owned lands
+      await fetchOwnedLands();
+      setShowSaleModal(false);
+      setError("");
+    } catch (error) {
+      console.error("Error listing land for sale:", error);
+      setError("Failed to list land for sale");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePartitionSubmit = async () => {
+    if (!selectedLand || !partitionData.askingPrice) return;
+
+    try {
+      setLoading(true);
+      // For now, we'll treat partition as a regular sale
+      // In the future, this could create a new land record for the partitioned area
+      const response = await apiService.listLandForSale(selectedLand._id, {
+        askingPrice: partitionData.askingPrice,
+        description: partitionData.description,
+        features: `Partition: ${partitionData.partitionType}`,
+        nearbyAmenities: "",
+      });
+
+      console.log("Land partitioned and listed:", response);
+      await fetchOwnedLands();
+      setShowPartitionModal(false);
+      setError("");
+    } catch (error) {
+      console.error("Error partitioning land:", error);
+      setError("Failed to partition land");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -163,6 +347,62 @@ const UserProfile: React.FC = () => {
                   <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
                     Verification Required
                   </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* User ID and QR Code Section */}
+        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* User ID */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <User className="inline h-4 w-4 mr-1" />
+                User ID (MongoDB ObjectId)
+              </label>
+              <div className="flex items-center space-x-2">
+                <code className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-md text-sm font-mono text-gray-900 break-all">
+                  {auth.user?.id || "Not available"}
+                </code>
+                <button
+                  onClick={() => copyToClipboard(auth.user?.id || "")}
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                  title="Copy User ID"
+                >
+                  <Copy className="h-4 w-4" />
+                </button>
+              </div>
+              {copySuccess && (
+                <p className="text-xs text-green-600 mt-1">
+                  Copied to clipboard!
+                </p>
+              )}
+            </div>
+
+            {/* QR Code */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <QrCode className="inline h-4 w-4 mr-1" />
+                User ID QR Code
+              </label>
+              <div className="flex justify-center">
+                {qrCodeUrl ? (
+                  <div className="bg-white p-4 rounded-lg border border-gray-300 shadow-sm">
+                    <img
+                      src={qrCodeUrl}
+                      alt="User ID QR Code"
+                      className="w-32 h-32"
+                    />
+                    <p className="text-xs text-gray-500 text-center mt-2">
+                      Scan to get User ID
+                    </p>
+                  </div>
+                ) : (
+                  <div className="w-32 h-32 bg-gray-100 border border-gray-300 rounded-lg flex items-center justify-center">
+                    <QrCode className="h-8 w-8 text-gray-400" />
+                  </div>
                 )}
               </div>
             </div>
@@ -362,7 +602,391 @@ const UserProfile: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Owned Lands Section */}
+        <div className="px-6 py-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900 flex items-center">
+              <Map className="h-5 w-5 mr-2" />
+              Owned Lands
+            </h3>
+            <button
+              onClick={toggleOwnedLands}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              {showOwnedLands ? "Hide" : "Show"} Lands
+            </button>
+          </div>
+
+          {showOwnedLands && (
+            <div className="space-y-4">
+              {landsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span className="ml-2 text-gray-600">Loading lands...</span>
+                </div>
+              ) : ownedLands.length === 0 ? (
+                <div className="text-center py-8">
+                  <Map className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">No lands owned yet</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {ownedLands.map((land) => (
+                    <div
+                      key={land._id}
+                      className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <h4 className="font-medium text-gray-900 truncate">
+                          {land.surveyNumber} - {land.subDivision}
+                        </h4>
+                        <span
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            land.status === "FOR_SALE"
+                              ? "bg-green-100 text-green-800"
+                              : land.status === "DIGITIZED"
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-gray-100 text-gray-800"
+                          }`}
+                        >
+                          {land.status}
+                        </span>
+                      </div>
+
+                      <div className="space-y-2 text-sm text-gray-600">
+                        <div className="flex items-center">
+                          <MapPin className="h-4 w-4 mr-1" />
+                          <span>
+                            {land.village}, {land.district}, {land.state}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center">
+                          <Calendar className="h-4 w-4 mr-1" />
+                          <span>
+                            Added:{" "}
+                            {new Date(land.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+
+                        {land.area && (
+                          <div className="flex items-center">
+                            <span className="font-medium">Area: </span>
+                            <span className="ml-1">
+                              {typeof land.area === "string"
+                                ? JSON.parse(land.area).acres + " acres"
+                                : land.area.acres + " acres"}
+                            </span>
+                          </div>
+                        )}
+
+                        {land.marketInfo?.askingPrice && (
+                          <div className="flex items-center">
+                            <DollarSign className="h-4 w-4 mr-1" />
+                            <span className="font-medium">
+                              ₹{land.marketInfo.askingPrice.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="pt-2 space-y-2">
+                          <div className="flex space-x-2">
+                            <button className="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm">
+                              <Eye className="h-4 w-4 mr-1" />
+                              View Details
+                            </button>
+                          </div>
+
+                          {land.status !== "FOR_SALE" && (
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => handleListForSale(land)}
+                                className="inline-flex items-center px-3 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded-md text-sm"
+                              >
+                                <ShoppingCart className="h-4 w-4 mr-1" />
+                                List for Sale
+                              </button>
+                              <button
+                                onClick={() => handlePartitionLand(land)}
+                                className="inline-flex items-center px-3 py-1 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-md text-sm"
+                              >
+                                <Scissors className="h-4 w-4 mr-1" />
+                                Partition
+                              </button>
+                            </div>
+                          )}
+
+                          {land.status === "FOR_SALE" && (
+                            <div className="flex space-x-2">
+                              <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 rounded-md text-sm">
+                                <ShoppingCart className="h-4 w-4 mr-1" />
+                                Listed for Sale
+                              </span>
+                              <button
+                                onClick={() => handlePartitionLand(land)}
+                                className="inline-flex items-center px-3 py-1 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-md text-sm"
+                              >
+                                <Scissors className="h-4 w-4 mr-1" />
+                                Partition
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Sale Modal */}
+      {showSaleModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">List Land for Sale</h3>
+              <button
+                onClick={() => setShowSaleModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Asking Price (₹)
+                </label>
+                <input
+                  type="number"
+                  value={saleData.askingPrice}
+                  onChange={(e) =>
+                    setSaleData({ ...saleData, askingPrice: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter asking price"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={saleData.description}
+                  onChange={(e) =>
+                    setSaleData({ ...saleData, description: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={3}
+                  placeholder="Describe the land..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Features
+                </label>
+                <input
+                  type="text"
+                  value={saleData.features}
+                  onChange={(e) =>
+                    setSaleData({ ...saleData, features: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Road access, Electricity, Water"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nearby Amenities
+                </label>
+                <input
+                  type="text"
+                  value={saleData.nearbyAmenities}
+                  onChange={(e) =>
+                    setSaleData({
+                      ...saleData,
+                      nearbyAmenities: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Schools, Hospitals, Markets"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Land Images (1-7 photos)
+                </label>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {selectedImages.length > 0 && (
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {selectedImages.map((image, index) => (
+                      <div key={index} className="relative">
+                        <img
+                          src={URL.createObjectURL(image)}
+                          alt={`Preview ${index + 1}`}
+                          className="w-full h-20 object-cover rounded-md"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeImage(index)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  {selectedImages.length}/7 images selected
+                </p>
+              </div>
+            </div>
+
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => setShowSaleModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaleSubmit}
+                disabled={loading || !saleData.askingPrice}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+              >
+                {loading ? "Listing..." : "List for Sale"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Partition Modal */}
+      {showPartitionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Partition Land</h3>
+              <button
+                onClick={() => setShowPartitionModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Partition Type
+                </label>
+                <select
+                  value={partitionData.partitionType}
+                  onChange={(e) =>
+                    setPartitionData({
+                      ...partitionData,
+                      partitionType: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="partial">Partial Sale</option>
+                  <option value="whole">Sale as Whole</option>
+                </select>
+              </div>
+
+              {partitionData.partitionType === "partial" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Partition Area (acres)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={partitionData.partitionArea}
+                    onChange={(e) =>
+                      setPartitionData({
+                        ...partitionData,
+                        partitionArea: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter area to partition"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Asking Price (₹)
+                </label>
+                <input
+                  type="number"
+                  value={partitionData.askingPrice}
+                  onChange={(e) =>
+                    setPartitionData({
+                      ...partitionData,
+                      askingPrice: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter asking price"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={partitionData.description}
+                  onChange={(e) =>
+                    setPartitionData({
+                      ...partitionData,
+                      description: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={3}
+                  placeholder="Describe the partitioned land..."
+                />
+              </div>
+            </div>
+
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => setShowPartitionModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePartitionSubmit}
+                disabled={loading || !partitionData.askingPrice}
+                className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50"
+              >
+                {loading ? "Processing..." : "Partition & List"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

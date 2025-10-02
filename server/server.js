@@ -5,6 +5,7 @@ const path = require("path");
 const connectDB = require("./config/database");
 const blockchainService = require("./config/blockchain");
 const ipfsService = require("./config/ipfs");
+const { initGridFS } = require("./config/gridfs");
 
 // Load environment variables
 dotenv.config();
@@ -54,6 +55,11 @@ const initializeServices = async () => {
     await connectDB();
     await blockchainService.initialize();
     await ipfsService.initialize();
+
+    // Initialize GridFS
+    initGridFS();
+    console.log("✅ GridFS service initialized");
+
     console.log("✅ All services initialized successfully");
   } catch (error) {
     console.error("❌ Service initialization failed:", error);
@@ -76,6 +82,29 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // Serve uploaded files (for development)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// Serve GridFS images
+app.get("/api/images/:filename", (req, res) => {
+  const { getFileStream } = require("./config/gridfs");
+  const filename = req.params.filename;
+
+  try {
+    const readstream = getFileStream(filename);
+    if (!readstream) {
+      return res.status(404).json({ error: "Image not found" });
+    }
+
+    readstream.on("error", (error) => {
+      console.error("GridFS stream error:", error);
+      res.status(404).json({ error: "Image not found" });
+    });
+
+    readstream.pipe(res);
+  } catch (error) {
+    console.error("Error serving image:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // API Routes
 app.use("/api/auth", require("./routes/auth"));
@@ -170,7 +199,7 @@ const startServer = async () => {
   try {
     await initializeServices();
 
-    app.listen(PORT, () => {
+    app.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Land Registry Server running on port ${PORT}`);
       console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`🌐 API URL: http://localhost:${PORT}/api`);

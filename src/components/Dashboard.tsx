@@ -1,26 +1,45 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Shield, Map, QrCode, BarChart3 } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
-import { Land } from '../types';
-import Navbar from './Navbar';
-import TransactionHistory from './TransactionHistory';
-import AdminPanel from './AdminPanel';
-import UserProfile from './UserProfile';
-import UserVerification from './UserVerification';
-import LandDatabase from './LandDatabase';
-import Marketplace from './Marketplace';
-import ChatSystem from './ChatSystem';
-import QRScanner from './QRScanner';
-import TwoFactorAuth from './TwoFactorAuth';
-import AuditorDashboard from './AuditorDashboard';
-import apiService from '../services/api';
+import React, { useState, useEffect } from "react";
+import {
+  Plus,
+  Search,
+  Filter,
+  Shield,
+  Map,
+  QrCode,
+  BarChart3,
+  CheckCircle,
+  X,
+} from "lucide-react";
+import { useAuth } from "../hooks/useAuth";
+import { Land } from "../types";
+import apiService from "../services/api";
+import Navbar from "./Navbar";
+import TransactionHistory from "./TransactionHistory";
+import AdminPanel from "./AdminPanel";
+import UserProfile from "./UserProfile";
+import UserVerification from "./UserVerification";
+import LandDatabase from "./LandDatabase";
+import Marketplace from "./Marketplace";
+import ChatSystem from "./ChatSystem";
+import QRScanner from "./QRScanner";
+import TwoFactorAuth from "./TwoFactorAuth";
+import AuditorDashboard from "./AuditorDashboard";
 
 const Dashboard: React.FC = () => {
   const { auth } = useAuth();
-  const [activeTab, setActiveTab] = useState('land-database');
+  const [activeTab, setActiveTab] = useState(
+    auth.user?.role === "ADMIN" ? "land-database" : "marketplace"
+  );
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [verificationResult, setVerificationResult] = useState<any>(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
+
+  // Redirect non-admin users away from land-database tab
+  useEffect(() => {
+    if (activeTab === "land-database" && auth.user?.role !== "ADMIN") {
+      setActiveTab("marketplace");
+    }
+  }, [activeTab, auth.user?.role]);
 
   const handleQRScan = async (assetId: string) => {
     try {
@@ -28,36 +47,52 @@ const Dashboard: React.FC = () => {
       const response = await apiService.verifyLandByAssetId(assetId);
       setVerificationResult(response.verification);
     } catch (error: any) {
-      setError(error.message || 'Failed to verify land');
+      setError(error.message || "Failed to verify land");
     }
   };
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'land-database':
-        return <LandDatabase />;
-      case 'marketplace':
+      case "land-database":
+        return auth.user?.role === "ADMIN" ? (
+          <LandDatabase />
+        ) : (
+          <div className="flex items-center justify-center min-h-96">
+            <div className="text-center">
+              <Shield className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                Access Restricted
+              </h2>
+              <p className="text-gray-600">
+                The Land Database is only accessible to administrators.
+              </p>
+            </div>
+          </div>
+        );
+      case "marketplace":
         return <Marketplace />;
-      case 'chats':
+      case "chats":
         return <ChatSystem />;
-      case 'transactions':
+      case "transactions":
         return <TransactionHistory />;
-      case 'profile':
+      case "profile":
         return <UserProfile />;
-      case 'admin':
-        return auth.user?.role === 'ADMIN' ? <AdminPanel /> : null;
-      case 'auditor':
-        return auth.user?.role === 'AUDITOR' ? <AuditorDashboard /> : null;
-      case 'verification':
+      case "admin":
+        return auth.user?.role === "ADMIN" ? <AdminPanel /> : null;
+      case "auditor":
+        return auth.user?.role === "AUDITOR" ? <AuditorDashboard /> : null;
+      case "verification":
         return <UserVerification />;
-      case 'two-factor':
+      case "two-factor":
         return <TwoFactorAuth />;
-      case 'qr-verify':
+      case "qr-verify":
         return (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">QR Code Verification</h1>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  QR Code Verification
+                </h1>
                 <p className="mt-1 text-sm text-gray-500">
                   Scan QR codes to verify land ownership and authenticity
                 </p>
@@ -70,27 +105,45 @@ const Dashboard: React.FC = () => {
                 Scan QR Code
               </button>
             </div>
-            
+
             {verificationResult && (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Verification Result</h2>
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                  Verification Result
+                </h2>
                 {verificationResult.isValid ? (
                   <div className="space-y-3">
                     <div className="flex items-center text-green-600">
                       <CheckCircle className="h-5 w-5 mr-2" />
-                      <span className="font-medium">Valid Land Certificate</span>
+                      <span className="font-medium">
+                        Valid Land Certificate
+                      </span>
                     </div>
                     <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div><strong>Asset ID:</strong> {verificationResult.assetId}</div>
-                      <div><strong>Owner:</strong> {verificationResult.currentOwner?.fullName}</div>
-                      <div><strong>Location:</strong> {verificationResult.landDetails.village}, {verificationResult.landDetails.district}</div>
-                      <div><strong>Area:</strong> {verificationResult.landDetails.area.acres} Acres</div>
+                      <div>
+                        <strong>Asset ID:</strong> {verificationResult.assetId}
+                      </div>
+                      <div>
+                        <strong>Owner:</strong>{" "}
+                        {verificationResult.currentOwner?.fullName}
+                      </div>
+                      <div>
+                        <strong>Location:</strong>{" "}
+                        {verificationResult.landDetails.village},{" "}
+                        {verificationResult.landDetails.district}
+                      </div>
+                      <div>
+                        <strong>Area:</strong>{" "}
+                        {verificationResult.landDetails.area.acres} Acres
+                      </div>
                     </div>
                   </div>
                 ) : (
                   <div className="flex items-center text-red-600">
                     <X className="h-5 w-5 mr-2" />
-                    <span className="font-medium">Invalid or Unverified Certificate</span>
+                    <span className="font-medium">
+                      Invalid or Unverified Certificate
+                    </span>
                   </div>
                 )}
               </div>
@@ -105,7 +158,7 @@ const Dashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
-      
+
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         {renderContent()}
       </main>

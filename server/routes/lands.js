@@ -1,13 +1,11 @@
 const express = require("express");
-const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
 const QRCode = require("qrcode");
+const fs = require("fs");
 const Land = require("../models/Land");
 const User = require("../models/User");
 const AuditLog = require("../models/AuditLog");
 const { auth, adminAuth } = require("../middleware/auth");
-const ipfsService = require("../config/ipfs");
+const { upload, uploadToGridFS } = require("../config/gridfs");
 const PDFGenerator = require("../utils/pdfGenerator");
 const DocumentWatermark = require("../utils/documentWatermark");
 const { v4: uuidv4 } = require("uuid");
@@ -15,304 +13,260 @@ const mongoose = require("mongoose");
 
 const router = express.Router();
 
-// Ensure uploads folder exists
-const uploadPath = path.join(__dirname, "../uploads");
-if (!fs.existsSync(uploadPath)) {
-  fs.mkdirSync(uploadPath, { recursive: true });
-  console.log("✅ Created uploads directory:", uploadPath);
-}
-
-// Store uploads in /uploads folder
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = [
-      "application/pdf",
-      "image/jpeg",
-      "image/png",
-      "image/jpg",
-    ];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(
-        new Error(
-          "Invalid file type. Only PDF, JPG, and PNG files are allowed."
-        )
-      );
-    }
-  },
-});
-
 // Add land to database (Admin only)
-router.post(
-  "/add",
-  adminAuth,
-  upload.single("document"),
-  async (req, res) => {
-    try {
-      console.log("=== ADDING LAND TO DATABASE ===");
-      console.log("Request body:", req.body);
-      console.log("File received:", req.file ? req.file.filename : "None");
+router.post("/add", adminAuth, upload.single("document"), async (req, res) => {
+  try {
+    console.log("=== ADDING LAND TO DATABASE ===");
+    console.log("Request body:", req.body);
+    console.log("File received:", req.file ? req.file.filename : "None");
 
-      const {
-        surveyNumber,
-        subDivision,
-        village,
-        taluka,
-        district,
-        state,
-        pincode,
-        area,
-        boundaries,
-        landType,
-        classification,
-        ownerId,
-        coordinates,
-        soilType,
-        waterSource,
-        roadAccess,
-        electricityConnection,
-      } = req.body;
+    const {
+      surveyNumber,
+      subDivision,
+      village,
+      taluka,
+      district,
+      state,
+      pincode,
+      area,
+      boundaries,
+      landType,
+      classification,
+      ownerId,
+      coordinates,
+      soilType,
+      waterSource,
+      roadAccess,
+      electricityConnection,
+    } = req.body;
 
-      // Validate required fields
-      const requiredFields = {
-        surveyNumber,
-        village,
-        taluka,
-        district,
-        state,
-        pincode,
-        landType,
-        ownerId,
-      };
-      const missingFields = Object.entries(requiredFields)
-        .filter(([key, value]) => !value || value.trim() === "")
-        .map(([key]) => key);
+    // Validate required fields
+    const requiredFields = {
+      surveyNumber,
+      village,
+      taluka,
+      district,
+      state,
+      pincode,
+      landType,
+      ownerId,
+    };
+    const missingFields = Object.entries(requiredFields)
+      .filter(([key, value]) => !value || value.trim() === "")
+      .map(([key]) => key);
 
-      if (missingFields.length > 0) {
-        return res.status(400).json({
-          message: `Missing required fields: ${missingFields.join(", ")}`,
-          missingFields,
-        });
-      }
-
-      // Validate owner exists
-      const owner = await User.findById(ownerId);
-      if (!owner) {
-        return res.status(400).json({ error: "Invalid ownerId: user not found" });
-      }
-
-      // Parse JSON strings safely
-      let parsedArea = {};
-      let parsedBoundaries = {};
-      let parsedCoordinates = null;
-
-      try {
-        parsedArea = area
-          ? typeof area === "string"
-            ? JSON.parse(area)
-            : area
-          : {};
-        parsedBoundaries = boundaries
-          ? typeof boundaries === "string"
-            ? JSON.parse(boundaries)
-            : boundaries
-          : {};
-        parsedCoordinates = coordinates
-          ? typeof coordinates === "string"
-            ? JSON.parse(coordinates)
-            : coordinates
-          : null;
-      } catch (parseError) {
-        console.error("JSON parse error:", parseError);
-        return res.status(400).json({
-          message:
-            "Invalid JSON format in area, boundaries, or coordinates fields",
-        });
-      }
-
-      // Upload document to IPFS with watermark
-      let originalDocument = null;
-      if (req.file) {
-        console.log("Processing and uploading original document...");
-
-        try {
-          // Generate watermark
-          const watermarkText = DocumentWatermark.generateWatermarkText(
-            "PENDING", // Asset ID will be generated
-            owner?.fullName || "Unknown"
-          );
-
-          // Read the file from disk
-          const fileBuffer = fs.readFileSync(req.file.path);
-
-          let processedBuffer;
-          if (req.file.mimetype === "application/pdf") {
-            processedBuffer = await DocumentWatermark.addWatermarkToPDF(
-              fileBuffer,
-              watermarkText
-            );
-          } else {
-            processedBuffer = await DocumentWatermark.addWatermarkToImage(
-              fileBuffer,
-              watermarkText
-            );
-          }
-
-          const ipfsHash = await ipfsService.uploadFile(
-            processedBuffer,
-            req.file.originalname
-          );
-
-          originalDocument = {
-            filename: req.file.originalname,
-            hash: ipfsHash,
-            url: ipfsService.getFileUrl(ipfsHash),
-            uploadedAt: new Date(),
-            uploadedBy: req.user._id
-          };
-
-          console.log(
-            `Original document processed and uploaded: ${req.file.originalname}`
-          );
-
-          // Clean up the temporary file
-          fs.unlinkSync(req.file.path);
-        } catch (uploadError) {
-          console.error("Document upload error:", uploadError);
-          // Clean up the temporary file if it exists
-          if (req.file && req.file.path) {
-            try {
-              fs.unlinkSync(req.file.path);
-            } catch (cleanupError) {
-              console.error("Failed to clean up temporary file:", cleanupError);
-            }
-          }
-          return res.status(500).json({
-            message: `Failed to upload document: ${req.file.originalname}`,
-          });
-        }
-      }
-
-      // Create land record
-      const landData = {
-        surveyNumber: surveyNumber.trim(),
-        subDivision: subDivision?.trim() || "",
-        village: village.trim(),
-        taluka: taluka.trim(),
-        district: district.trim(),
-        state: state.trim(),
-        pincode: pincode.trim(),
-        area: {
-          acres: parseFloat(parsedArea.acres) || 0,
-          guntas: parseFloat(parsedArea.guntas) || 0,
-          sqft: parseFloat(parsedArea.sqft) || 0,
-        },
-        boundaries: {
-          north: parsedBoundaries.north || "",
-          south: parsedBoundaries.south || "",
-          east: parsedBoundaries.east || "",
-          west: parsedBoundaries.west || "",
-        },
-        coordinates: parsedCoordinates
-          ? {
-              latitude: parseFloat(parsedCoordinates.latitude),
-              longitude: parseFloat(parsedCoordinates.longitude),
-            }
-          : undefined,
-        landType,
-        classification: classification || undefined,
-        originalDocument,
-        owner: ownerId,
-        currentOwner: ownerId,
-        ownershipHistory: [
-          {
-            owner: ownerId,
-            fromDate: new Date(),
-            documentReference: "INITIAL_RECORD",
-            transactionType: "INITIAL",
-          },
-        ],
-        addedBy: req.user._id,
-        verificationStatus: "PENDING",
-        metadata: {
-          soilType: soilType || "",
-          waterSource: waterSource || "",
-          roadAccess: roadAccess === "true" || roadAccess === true,
-          electricityConnection:
-            electricityConnection === "true" || electricityConnection === true,
-        },
-      };
-
-      // Generate and assign assetId
-      landData.assetId = uuidv4();
-
-      console.log("Creating land with processed data...");
-      const savedLand = await new Land(landData).save();
-
-      console.log(
-        `✅ Land successfully added with Asset ID: ${savedLand.assetId}`
-      );
-
-      // Call digitalization with the saved document's _id
-      console.log("=== DIGITALIZING LAND DOCUMENT ===");
-      console.log("Land ID:", savedLand._id);
-
-      // await digitalizeLandDocuments(savedLand._id, req.user._id);
-
-      res.status(201).json({
-        success: true,
-        message: "Land added to database successfully",
-        land: {
-          id: savedLand._id,
-          assetId: savedLand.assetId,
-          surveyNumber: savedLand.surveyNumber,
-          village: savedLand.village,
-          district: savedLand.district,
-          state: savedLand.state,
-          landType: savedLand.landType,
-          documentsUploaded: originalDocument ? 1 : 0,
-        },
-      });
-    } catch (error) {
-      console.error("❌ Add land error:", error);
-
-      // Log failed attempt
-      try {
-        await AuditLog.logAction(
-          "LAND_ADD",
-          req.user._id,
-          "LAND",
-          "FAILED",
-          { error: error.message },
-          req
-        );
-      } catch (auditError) {
-        console.error("Audit log error:", auditError);
-      }
-
-      res.status(500).json({
-        success: false,
-        message: "Failed to add land to database",
-        error:
-          process.env.NODE_ENV === "development"
-            ? error.message
-            : "Internal server error",
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        message: `Missing required fields: ${missingFields.join(", ")}`,
+        missingFields,
       });
     }
+
+    // Validate owner exists
+    const owner = await User.findById(ownerId);
+    if (!owner) {
+      return res.status(400).json({ error: "Invalid ownerId: user not found" });
+    }
+
+    // Parse JSON strings safely
+    let parsedArea = {};
+    let parsedBoundaries = {};
+    let parsedCoordinates = null;
+
+    try {
+      parsedArea = area
+        ? typeof area === "string"
+          ? JSON.parse(area)
+          : area
+        : {};
+      parsedBoundaries = boundaries
+        ? typeof boundaries === "string"
+          ? JSON.parse(boundaries)
+          : boundaries
+        : {};
+      parsedCoordinates = coordinates
+        ? typeof coordinates === "string"
+          ? JSON.parse(coordinates)
+          : coordinates
+        : null;
+    } catch (parseError) {
+      console.error("JSON parse error:", parseError);
+      return res.status(400).json({
+        message:
+          "Invalid JSON format in area, boundaries, or coordinates fields",
+      });
+    }
+
+    // Upload document to IPFS with watermark
+    let originalDocument = null;
+    if (req.file) {
+      console.log("Processing and uploading original document...");
+
+      try {
+        // Generate watermark
+        const watermarkText = DocumentWatermark.generateWatermarkText(
+          "PENDING", // Asset ID will be generated
+          owner?.fullName || "Unknown"
+        );
+
+        // Read the file from disk
+        const fileBuffer = fs.readFileSync(req.file.path);
+
+        let processedBuffer;
+        if (req.file.mimetype === "application/pdf") {
+          processedBuffer = await DocumentWatermark.addWatermarkToPDF(
+            fileBuffer,
+            watermarkText
+          );
+        } else {
+          processedBuffer = await DocumentWatermark.addWatermarkToImage(
+            fileBuffer,
+            watermarkText
+          );
+        }
+
+        const ipfsHash = await ipfsService.uploadFile(
+          processedBuffer,
+          req.file.originalname
+        );
+
+        originalDocument = {
+          filename: req.file.originalname,
+          hash: ipfsHash,
+          url: ipfsService.getFileUrl(ipfsHash),
+          uploadedAt: new Date(),
+          uploadedBy: req.user._id,
+        };
+
+        console.log(
+          `Original document processed and uploaded: ${req.file.originalname}`
+        );
+
+        // Clean up the temporary file
+        fs.unlinkSync(req.file.path);
+      } catch (uploadError) {
+        console.error("Document upload error:", uploadError);
+        // Clean up the temporary file if it exists
+        if (req.file && req.file.path) {
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch (cleanupError) {
+            console.error("Failed to clean up temporary file:", cleanupError);
+          }
+        }
+        return res.status(500).json({
+          message: `Failed to upload document: ${req.file.originalname}`,
+        });
+      }
+    }
+
+    // Create land record
+    const landData = {
+      surveyNumber: surveyNumber.trim(),
+      subDivision: subDivision?.trim() || "",
+      village: village.trim(),
+      taluka: taluka.trim(),
+      district: district.trim(),
+      state: state.trim(),
+      pincode: pincode.trim(),
+      area: {
+        acres: parseFloat(parsedArea.acres) || 0,
+        guntas: parseFloat(parsedArea.guntas) || 0,
+        sqft: parseFloat(parsedArea.sqft) || 0,
+      },
+      boundaries: {
+        north: parsedBoundaries.north || "",
+        south: parsedBoundaries.south || "",
+        east: parsedBoundaries.east || "",
+        west: parsedBoundaries.west || "",
+      },
+      coordinates: parsedCoordinates
+        ? {
+            latitude: parseFloat(parsedCoordinates.latitude),
+            longitude: parseFloat(parsedCoordinates.longitude),
+          }
+        : undefined,
+      landType,
+      classification: classification || undefined,
+      originalDocument,
+      owner: ownerId,
+      currentOwner: ownerId,
+      ownershipHistory: [
+        {
+          owner: ownerId,
+          fromDate: new Date(),
+          documentReference: "INITIAL_RECORD",
+          transactionType: "INITIAL",
+        },
+      ],
+      addedBy: req.user._id,
+      verificationStatus: "PENDING",
+      metadata: {
+        soilType: soilType || "",
+        waterSource: waterSource || "",
+        roadAccess: roadAccess === "true" || roadAccess === true,
+        electricityConnection:
+          electricityConnection === "true" || electricityConnection === true,
+      },
+    };
+
+    // Generate and assign assetId
+    landData.assetId = uuidv4();
+
+    console.log("Creating land with processed data...");
+    const savedLand = await new Land(landData).save();
+
+    console.log(
+      `✅ Land successfully added with Asset ID: ${savedLand.assetId}`
+    );
+
+    // Call digitalization with the saved document's _id
+    console.log("=== DIGITALIZING LAND DOCUMENT ===");
+    console.log("Land ID:", savedLand._id);
+
+    // await digitalizeLandDocuments(savedLand._id, req.user._id);
+
+    res.status(201).json({
+      success: true,
+      message: "Land added to database successfully",
+      land: {
+        id: savedLand._id,
+        assetId: savedLand.assetId,
+        surveyNumber: savedLand.surveyNumber,
+        village: savedLand.village,
+        district: savedLand.district,
+        state: savedLand.state,
+        landType: savedLand.landType,
+        documentsUploaded: originalDocument ? 1 : 0,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Add land error:", error);
+
+    // Log failed attempt
+    try {
+      await AuditLog.logAction(
+        "LAND_ADD",
+        req.user._id,
+        "LAND",
+        "FAILED",
+        { error: error.message },
+        req
+      );
+    } catch (auditError) {
+      console.error("Audit log error:", auditError);
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to add land to database",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : "Internal server error",
+    });
   }
-);
+});
 
 // Digitalize land document (Admin only)
 router.post("/digitalize", adminAuth, async (req, res) => {
@@ -389,7 +343,7 @@ router.post("/digitalize", adminAuth, async (req, res) => {
       digitalizedBy: req.user._id,
       verifiedBy: req.user._id,
       generatedAt: new Date(),
-      isDigitalized: true
+      isDigitalized: true,
     };
 
     land.verificationStatus = "VERIFIED";
@@ -437,8 +391,8 @@ router.post("/digitalize", adminAuth, async (req, res) => {
   }
 });
 
-// Get all lands with advanced filtering
-router.get("/", async (req, res) => {
+// Get all lands with advanced filtering (Admin only)
+router.get("/", adminAuth, async (req, res) => {
   try {
     const {
       page = 1,
@@ -536,7 +490,7 @@ router.get("/land/:id", async (req, res) => {
       .populate("owner", "name email fullName") // fetch owner details
       .populate("currentOwner", "name email fullName") // fetch current owner details
       .populate("digitalDocument.digitalizedBy", "name email fullName") // fetch user who digitalized
-      .populate("digitalDocument.verifiedBy", "name email fullName");   // fetch verifier
+      .populate("digitalDocument.verifiedBy", "name email fullName"); // fetch verifier
 
     if (!land) {
       return res.status(404).json({ error: "Land not found" });
@@ -664,123 +618,174 @@ router.post("/:landId/claim", auth, async (req, res) => {
 
 // List land for sale (Owner only)
 // Enhanced list-for-sale route with image upload support
-router.post("/:landId/list-for-sale", auth, upload.array("images", 5), async (req, res) => {
-  try {
-    const { askingPrice, description, features, nearbyAmenities } = req.body;
-
-    if (!askingPrice || askingPrice <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid asking price is required",
+router.post(
+  "/:landId/list-for-sale",
+  auth,
+  upload.array("images", 7), // Allow up to 7 images as per frontend
+  async (req, res) => {
+    try {
+      console.log("📝 List for sale request received:", {
+        landId: req.params.landId,
+        body: req.body,
+        files: req.files ? req.files.length : 0,
       });
-    }
 
-    const land = await Land.findById(req.params.landId);
-    if (!land) {
-      return res.status(404).json({
-        success: false,
-        message: "Land not found",
-      });
-    }
+      const { askingPrice, description, features, nearbyAmenities } = req.body;
 
-    if (
-      !land.currentOwner ||
-      land.currentOwner.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Only the owner can list this land for sale",
-      });
-    }
+      if (!askingPrice || askingPrice <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid asking price is required",
+        });
+      }
 
-    // Only call canBeListedForSale if it exists
-    if (typeof land.canBeListedForSale === "function" && !land.canBeListedForSale()) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Land must be digitalized and verified before listing for sale",
-      });
-    }
+      const land = await Land.findById(req.params.landId);
+      if (!land) {
+        return res.status(404).json({
+          success: false,
+          message: "Land not found",
+        });
+      }
 
-    // Handle image uploads to IPFS
-    const imageHashes = [];
-    if (req.files && req.files.length > 0) {
-      console.log(`📸 Processing ${req.files.length} images for land ${land.assetId}`);
-      for (const file of req.files) {
-        try {
-          const fileBuffer = fs.readFileSync(file.path);
-          const hash = await ipfsService.uploadFile(fileBuffer, file.originalname);
-          imageHashes.push(hash);
-          console.log(`✅ Image uploaded to IPFS: ${hash}`);
-          fs.unlinkSync(file.path);
-        } catch (uploadError) {
-          console.error(`❌ Failed to upload image ${file.originalname}:`, uploadError);
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
+      if (
+        !land.currentOwner ||
+        land.currentOwner.toString() !== req.user._id.toString()
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Only the owner can list this land for sale",
+        });
+      }
+
+      // Only call canBeListedForSale if it exists
+      if (
+        typeof land.canBeListedForSale === "function" &&
+        !land.canBeListedForSale()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Land must be digitalized and verified before listing for sale",
+        });
+      }
+
+      // Parse features and amenities if they're JSON strings
+      let parsedFeatures = [];
+      let parsedAmenities = [];
+
+      try {
+        if (features) {
+          parsedFeatures =
+            typeof features === "string" ? JSON.parse(features) : features;
+        }
+        if (nearbyAmenities) {
+          parsedAmenities =
+            typeof nearbyAmenities === "string"
+              ? JSON.parse(nearbyAmenities)
+              : nearbyAmenities;
+        }
+      } catch (parseError) {
+        console.log(
+          "⚠️ Could not parse features/amenities as JSON, using as strings"
+        );
+        parsedFeatures = features ? [features] : [];
+        parsedAmenities = nearbyAmenities ? [nearbyAmenities] : [];
+      }
+
+      // Handle image uploads to GridFS
+      const imageFilenames = [];
+      if (req.files && req.files.length > 0) {
+        console.log(
+          `📸 Processing ${req.files.length} images for land ${land.assetId}`
+        );
+        for (const file of req.files) {
+          try {
+            // Upload to GridFS
+            const gridfsFilename = await uploadToGridFS(
+              file.path,
+              file.filename
+            );
+            imageFilenames.push(gridfsFilename);
+
+            // Clean up temporary file
+            if (fs.existsSync(file.path)) {
+              fs.unlinkSync(file.path);
+            }
+          } catch (uploadError) {
+            console.error(
+              `❌ Failed to upload image ${file.originalname}:`,
+              uploadError
+            );
+            // Clean up temporary file on error
+            if (fs.existsSync(file.path)) {
+              fs.unlinkSync(file.path);
+            }
           }
         }
       }
-    }
 
-    // Calculate price per sqft
-    const totalAreaSqft = land.getTotalAreaSqft ? land.getTotalAreaSqft() : 0;
-    let pricePerSqft = 0;
-    if (totalAreaSqft > 0) {
-      pricePerSqft = parseFloat(askingPrice) / totalAreaSqft;
-    }
+      // Calculate price per sqft
+      const totalAreaSqft = land.getTotalAreaSqft ? land.getTotalAreaSqft() : 0;
+      let pricePerSqft = 0;
+      if (totalAreaSqft > 0) {
+        pricePerSqft = parseFloat(askingPrice) / totalAreaSqft;
+      }
 
-    land.marketInfo = {
-      isForSale: true,
-      askingPrice: parseFloat(askingPrice),
-      pricePerSqft,
-      listedDate: new Date(),
-      description: description || "",
-      features: features || [],
-      nearbyAmenities: nearbyAmenities || [],
-      images: imageHashes,
-    };
-
-    await land.save();
-
-    // Log audit trail
-    await AuditLog.logAction(
-      "LAND_LIST_SALE",
-      req.user._id,
-      "LAND",
-      land._id.toString(),
-      {
-        assetId: land.assetId,
+      land.marketInfo = {
+        isForSale: true,
         askingPrice: parseFloat(askingPrice),
-        imageCount: imageHashes.length,
-      },
-      req
-    );
+        pricePerSqft,
+        listedDate: new Date(),
+        description: description || "",
+        features: parsedFeatures,
+        nearbyAmenities: parsedAmenities,
+        images: imageFilenames,
+      };
 
-    console.log(`✅ Land ${land.assetId} listed for sale with ${imageHashes.length} images`);
+      await land.save();
 
-    res.json({
-      success: true,
-      message: "Land listed for sale successfully",
-      land,
-    });
-  } catch (error) {
-    console.error("List for sale error:", error);
-    
-    // Clean up any uploaded files if there was an error
-    if (req.files && req.files.length > 0) {
-      req.files.forEach(file => {
-        if (fs.existsSync(file.path)) {
-          fs.unlinkSync(file.path);
-        }
+      // Log audit trail
+      await AuditLog.logAction(
+        "LAND_LIST_SALE",
+        req.user._id,
+        "LAND",
+        land._id.toString(),
+        {
+          assetId: land.assetId,
+          askingPrice: parseFloat(askingPrice),
+          imageCount: imageFilenames.length,
+        },
+        req
+      );
+
+      console.log(
+        `✅ Land ${land.assetId} listed for sale with ${imageFilenames.length} images`
+      );
+
+      res.json({
+        success: true,
+        message: "Land listed for sale successfully",
+        land,
+      });
+    } catch (error) {
+      console.error("List for sale error:", error);
+
+      // Clean up any uploaded files if there was an error
+      if (req.files && req.files.length > 0) {
+        req.files.forEach((file) => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to list land for sale",
       });
     }
-    
-    res.status(500).json({
-      success: false,
-      message: "Failed to list land for sale",
-    });
   }
-});
+);
 
 // Get user's owned lands
 router.get("/my-lands", auth, async (req, res) => {
@@ -1088,70 +1093,77 @@ router.get("/:landId/certificate", async (req, res) => {
   try {
     const { landId } = req.params;
     console.log(`Certificate download request for landId: ${landId}`);
-    
+
     if (!mongoose.Types.ObjectId.isValid(landId)) {
       console.error(`Invalid landId format: ${landId}`);
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        error: "Invalid landId format" 
+        error: "Invalid landId format",
       });
     }
 
     const land = await Land.findById(landId);
     if (!land) {
       console.error(`Land not found: ${landId}`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        error: "Land not found" 
+        error: "Land not found",
       });
     }
 
     if (!land.digitalDocument || !land.digitalDocument.isDigitalized) {
       console.error(`Land not digitalized: ${landId}`);
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        error: "Land is not digitalized. Please contact an administrator to digitalize this land first." 
+        error:
+          "Land is not digitalized. Please contact an administrator to digitalize this land first.",
       });
     }
 
     if (!land.digitalDocument.hash) {
       console.error(`No digital document hash found for land: ${landId}`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        error: "Digital certificate hash not found" 
+        error: "Digital certificate hash not found",
       });
     }
 
-    console.log(`Attempting to download certificate for land: ${land.assetId}, hash: ${land.digitalDocument.hash}`);
+    console.log(
+      `Attempting to download certificate for land: ${land.assetId}, hash: ${land.digitalDocument.hash}`
+    );
 
     // Fetch the PDF from IPFS
     const pdfBuffer = await ipfsService.downloadFile(land.digitalDocument.hash);
-    
+
     if (!pdfBuffer || pdfBuffer.length === 0) {
       console.error(`Empty or null PDF buffer for land: ${landId}`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        error: "Certificate file not found or is empty" 
+        error: "Certificate file not found or is empty",
       });
     }
 
-    console.log(`Successfully retrieved certificate for land: ${land.assetId}, size: ${pdfBuffer.length} bytes`);
+    console.log(
+      `Successfully retrieved certificate for land: ${land.assetId}, size: ${pdfBuffer.length} bytes`
+    );
 
     // Set proper headers for PDF download
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="land-certificate-${land.assetId}.pdf"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="land-certificate-${land.assetId}.pdf"`
+    );
     res.setHeader("Content-Length", pdfBuffer.length);
     res.setHeader("Cache-Control", "no-cache");
-    
+
     // Send the PDF buffer
     res.send(pdfBuffer);
-    
   } catch (error) {
     console.error("Download certificate error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to download certificate",
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -1161,81 +1173,92 @@ router.get("/:landId/original-document", async (req, res) => {
   try {
     const { landId } = req.params;
     console.log(`Original document download request for landId: ${landId}`);
-    
+
     if (!mongoose.Types.ObjectId.isValid(landId)) {
       console.error(`Invalid landId format: ${landId}`);
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        error: "Invalid landId format" 
+        error: "Invalid landId format",
       });
     }
 
     const land = await Land.findById(landId);
     if (!land) {
       console.error(`Land not found: ${landId}`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        error: "Land not found" 
+        error: "Land not found",
       });
     }
 
     if (!land.originalDocument || !land.originalDocument.hash) {
       console.error(`No original document found for land: ${landId}`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        error: "Original document not found for this land" 
+        error: "Original document not found for this land",
       });
     }
 
     if (!land.originalDocument.filename) {
-      console.error(`No filename found for original document of land: ${landId}`);
-      return res.status(404).json({ 
+      console.error(
+        `No filename found for original document of land: ${landId}`
+      );
+      return res.status(404).json({
         success: false,
-        error: "Original document filename not found" 
+        error: "Original document filename not found",
       });
     }
 
-    console.log(`Attempting to download original document for land: ${land.assetId}, hash: ${land.originalDocument.hash}`);
+    console.log(
+      `Attempting to download original document for land: ${land.assetId}, hash: ${land.originalDocument.hash}`
+    );
 
     // Fetch the file from IPFS
-    const fileBuffer = await ipfsService.downloadFile(land.originalDocument.hash);
-    
+    const fileBuffer = await ipfsService.downloadFile(
+      land.originalDocument.hash
+    );
+
     if (!fileBuffer || fileBuffer.length === 0) {
       console.error(`Empty or null file buffer for land: ${landId}`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        error: "Document file not found or is empty" 
+        error: "Document file not found or is empty",
       });
     }
 
-    console.log(`Successfully retrieved original document for land: ${land.assetId}, size: ${fileBuffer.length} bytes`);
+    console.log(
+      `Successfully retrieved original document for land: ${land.assetId}, size: ${fileBuffer.length} bytes`
+    );
 
     // Detect file type from filename
     const mime = require("mime-types");
     const path = require("path");
-    
+
     const originalFilename = land.originalDocument.filename;
     const ext = path.extname(originalFilename).toLowerCase();
-    const mimeType = mime.lookup(originalFilename) || 'application/octet-stream';
-    
+    const mimeType =
+      mime.lookup(originalFilename) || "application/octet-stream";
+
     // Generate download filename
     const downloadFilename = `land-document-${land.assetId}${ext}`;
 
     // Set proper headers for file download
     res.setHeader("Content-Type", mimeType);
-    res.setHeader("Content-Disposition", `attachment; filename="${downloadFilename}"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${downloadFilename}"`
+    );
     res.setHeader("Content-Length", fileBuffer.length);
     res.setHeader("Cache-Control", "no-cache");
-    
+
     // Send the file buffer
     res.send(fileBuffer);
-    
   } catch (error) {
     console.error("Download original document error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to download original document",
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -1245,19 +1268,19 @@ router.get("/:landId/document-status", async (req, res) => {
   try {
     const { landId } = req.params;
     console.log(`Document status check for landId: ${landId}`);
-    
+
     if (!mongoose.Types.ObjectId.isValid(landId)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        error: "Invalid landId format" 
+        error: "Invalid landId format",
       });
     }
 
     const land = await Land.findById(landId);
     if (!land) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        error: "Land not found" 
+        error: "Land not found",
       });
     }
 
@@ -1265,58 +1288,145 @@ router.get("/:landId/document-status", async (req, res) => {
       landId: land._id,
       assetId: land.assetId,
       originalDocument: null,
-      digitalDocument: null
+      digitalDocument: null,
     };
 
     // Check original document
     if (land.originalDocument && land.originalDocument.hash) {
-      const originalExists = await ipfsService.fileExists(land.originalDocument.hash);
-      const originalInfo = await ipfsService.getFileInfo(land.originalDocument.hash);
-      
+      const originalExists = await ipfsService.fileExists(
+        land.originalDocument.hash
+      );
+      const originalInfo = await ipfsService.getFileInfo(
+        land.originalDocument.hash
+      );
+
       status.originalDocument = {
         exists: originalExists,
         filename: land.originalDocument.filename,
         hash: land.originalDocument.hash,
         size: originalInfo ? originalInfo.size : 0,
-        url: ipfsService.getFileUrl(land.originalDocument.hash)
+        url: ipfsService.getFileUrl(land.originalDocument.hash),
       };
     }
 
     // Check digital document
     if (land.digitalDocument && land.digitalDocument.hash) {
-      const digitalExists = await ipfsService.fileExists(land.digitalDocument.hash);
-      const digitalInfo = await ipfsService.getFileInfo(land.digitalDocument.hash);
-      
+      const digitalExists = await ipfsService.fileExists(
+        land.digitalDocument.hash
+      );
+      const digitalInfo = await ipfsService.getFileInfo(
+        land.digitalDocument.hash
+      );
+
       status.digitalDocument = {
         exists: digitalExists,
         isDigitalized: land.digitalDocument.isDigitalized,
         hash: land.digitalDocument.hash,
         size: digitalInfo ? digitalInfo.size : 0,
-        url: ipfsService.getFileUrl(land.digitalDocument.hash)
+        url: ipfsService.getFileUrl(land.digitalDocument.hash),
       };
     }
 
     res.json({
       success: true,
-      data: status
+      data: status,
     });
-    
   } catch (error) {
     console.error("Document status check error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to check document status",
-      error: error.message
+      error: error.message,
+    });
+  }
+});
+
+// Get lands owned by a specific user (by user ID)
+router.get("/owned-by/:userId", auth, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: "Invalid user ID format" });
+    }
+
+    // Check if user is requesting their own lands or if they're an admin
+    if (req.user._id.toString() !== userId && req.user.role !== "ADMIN") {
+      return res
+        .status(403)
+        .json({ error: "Access denied. You can only view your own lands." });
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Get lands owned by the user
+    const lands = await Land.find({ currentOwner: userId })
+      .populate("currentOwner", "name email")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    // Get total count for pagination
+    const totalLands = await Land.countDocuments({ currentOwner: userId });
+
+    // Format the response
+    const formattedLands = lands.map((land) => ({
+      _id: land._id,
+      assetId: land.assetId,
+      surveyNumber: land.surveyNumber,
+      subDivision: land.subDivision,
+      village: land.village,
+      taluka: land.taluka,
+      district: land.district,
+      state: land.state,
+      pincode: land.pincode,
+      area: land.area,
+      boundaries: land.boundaries,
+      landType: land.landType,
+      classification: land.classification,
+      coordinates: land.coordinates,
+      soilType: land.soilType,
+      waterSource: land.waterSource,
+      roadAccess: land.roadAccess,
+      electricityConnection: land.electricityConnection,
+      status: land.status,
+      currentOwner: land.currentOwner,
+      createdAt: land.createdAt,
+      updatedAt: land.updatedAt,
+      marketInfo: land.marketInfo,
+      digitalDocument: land.digitalDocument,
+    }));
+
+    res.json({
+      success: true,
+      lands: formattedLands,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalLands / parseInt(limit)),
+        totalLands,
+        hasNext: skip + parseInt(limit) < totalLands,
+        hasPrev: parseInt(page) > 1,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching owned lands:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch owned lands",
+      message: error.message,
     });
   }
 });
 
 // Fix: Add a catch-all route at the end to return JSON for unknown API endpoints
-
-// Place this at the very end, before module.exports:
 router.use((req, res, next) => {
-  if (req.originalUrl.startsWith('/api/')) {
-    return res.status(404).json({ success: false, message: 'API route not found' });
+  if (req.originalUrl.startsWith("/api/")) {
+    return res
+      .status(404)
+      .json({ success: false, message: "API route not found" });
   }
   next();
 });
