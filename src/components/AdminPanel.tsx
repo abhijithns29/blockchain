@@ -152,20 +152,96 @@ const AdminPanel: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="bg-gray-50 rounded-md p-3 mb-4">
-                  <h4 className="font-medium text-gray-700 mb-2">Submitted Documents:</h4>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="bg-gray-50 rounded-md p-4 mb-4">
+                  <h4 className="font-medium text-gray-700 mb-3">Submitted Verification Documents:</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                     {user.verificationDocuments?.panCard && (
-                      <div>✓ PAN Card: {user.verificationDocuments.panCard.number}</div>
+                      <div className="bg-white rounded p-3 border">
+                        <div className="flex items-center mb-2">
+                          <FileText className="h-4 w-4 text-green-600 mr-2" />
+                          <span className="font-medium text-gray-700">PAN Card</span>
+                        </div>
+                        <div className="text-gray-600">Number: {user.verificationDocuments.panCard.number}</div>
+                        {user.verificationDocuments.panCard.documentUrl && (
+                          <div className="mt-2">
+                            <a 
+                              href={user.verificationDocuments.panCard.documentUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 text-xs flex items-center"
+                            >
+                              <Eye className="h-3 w-3 mr-1" />
+                              View Document
+                            </a>
+                          </div>
+                        )}
+                      </div>
                     )}
                     {user.verificationDocuments?.aadhaarCard && (
-                      <div>✓ Aadhaar: {user.verificationDocuments.aadhaarCard.number}</div>
+                      <div className="bg-white rounded p-3 border">
+                        <div className="flex items-center mb-2">
+                          <FileText className="h-4 w-4 text-green-600 mr-2" />
+                          <span className="font-medium text-gray-700">Aadhaar Card</span>
+                        </div>
+                        <div className="text-gray-600">Number: {user.verificationDocuments.aadhaarCard.number}</div>
+                        {user.verificationDocuments.aadhaarCard.documentUrl && (
+                          <div className="mt-2">
+                            <a 
+                              href={user.verificationDocuments.aadhaarCard.documentUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 text-xs flex items-center"
+                            >
+                              <Eye className="h-3 w-3 mr-1" />
+                              View Document
+                            </a>
+                          </div>
+                        )}
+                      </div>
                     )}
                     {user.verificationDocuments?.drivingLicense && (
-                      <div>✓ DL: {user.verificationDocuments.drivingLicense.number}</div>
+                      <div className="bg-white rounded p-3 border">
+                        <div className="flex items-center mb-2">
+                          <FileText className="h-4 w-4 text-green-600 mr-2" />
+                          <span className="font-medium text-gray-700">Driving License</span>
+                        </div>
+                        <div className="text-gray-600">Number: {user.verificationDocuments.drivingLicense.number}</div>
+                        {user.verificationDocuments.drivingLicense.documentUrl && (
+                          <div className="mt-2">
+                            <a 
+                              href={user.verificationDocuments.drivingLicense.documentUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 text-xs flex items-center"
+                            >
+                              <Eye className="h-3 w-3 mr-1" />
+                              View Document
+                            </a>
+                          </div>
+                        )}
+                      </div>
                     )}
                     {user.verificationDocuments?.passport && (
-                      <div>✓ Passport: {user.verificationDocuments.passport.number}</div>
+                      <div className="bg-white rounded p-3 border">
+                        <div className="flex items-center mb-2">
+                          <FileText className="h-4 w-4 text-green-600 mr-2" />
+                          <span className="font-medium text-gray-700">Passport</span>
+                        </div>
+                        <div className="text-gray-600">Number: {user.verificationDocuments.passport.number}</div>
+                        {user.verificationDocuments.passport.documentUrl && (
+                          <div className="mt-2">
+                            <a 
+                              href={user.verificationDocuments.passport.documentUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 text-xs flex items-center"
+                            >
+                              <Eye className="h-3 w-3 mr-1" />
+                              View Document
+                            </a>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

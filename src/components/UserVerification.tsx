@@ -11,7 +11,7 @@ import { useAuth } from "../hooks/useAuth";
 import apiService from "../services/api";
 
 const UserVerification: React.FC = () => {
-  const { auth } = useAuth();
+  const { auth, refreshUser } = useAuth();
   const [formData, setFormData] = useState({
     panNumber: "",
     aadhaarNumber: "",
@@ -114,7 +114,6 @@ const UserVerification: React.FC = () => {
   const canSubmit = () => {
     return (
       !loading &&
-      auth.user?.verificationStatus !== "PENDING" &&
       auth.user?.verificationStatus !== "VERIFIED"
     );
   };
@@ -167,7 +166,7 @@ const UserVerification: React.FC = () => {
         formDataToSend
       );
 
-      if (response.success) {
+      if (response.message === "Verification documents submitted successfully") {
         setSuccess(
           "Verification documents submitted successfully! Please wait for admin approval."
         );
@@ -187,6 +186,9 @@ const UserVerification: React.FC = () => {
           passport: null,
         });
 
+        // Refresh user data to update verification status
+        await refreshUser();
+        
         // Optionally reload page after delay
         setTimeout(() => {
           window.location.reload();
@@ -208,15 +210,15 @@ const UserVerification: React.FC = () => {
     switch (auth.user.verificationStatus) {
       case "PENDING":
         return (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-6">
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
             <div className="flex items-center">
-              <Clock className="h-5 w-5 text-yellow-500 mr-2" />
-              <span className="text-yellow-800 font-medium">
-                Verification Pending
+              <Clock className="h-5 w-5 text-blue-500 mr-2" />
+              <span className="text-blue-800 font-medium">
+                Submitted for Verification
               </span>
             </div>
-            <p className="text-yellow-700 mt-1">
-              Your documents are under review. You'll be notified once verified.
+            <p className="text-blue-700 mt-1">
+              Your verification documents have been submitted successfully. Please wait for admin review. You'll be notified once the verification is complete.
             </p>
           </div>
         );
@@ -250,6 +252,7 @@ const UserVerification: React.FC = () => {
             </p>
           </div>
         );
+      case "NOT_SUBMITTED":
       default:
         return null;
     }
@@ -647,6 +650,12 @@ const UserVerification: React.FC = () => {
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                 Submitting...
               </div>
+            ) : auth.user?.verificationStatus === "PENDING" ? (
+              "Verification Pending"
+            ) : auth.user?.verificationStatus === "REJECTED" ? (
+              "Resubmit for Verification"
+            ) : auth.user?.verificationStatus === "NOT_SUBMITTED" ? (
+              "Submit for Verification"
             ) : (
               "Submit for Verification"
             )}

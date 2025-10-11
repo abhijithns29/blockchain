@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const path = require("path");
+const fs = require("fs");
 const connectDB = require("./config/database");
 const blockchainService = require("./config/blockchain");
 const ipfsService = require("./config/ipfs");
@@ -82,6 +83,48 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // Serve uploaded files (for development)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// Custom route to serve documents with proper headers for inline viewing
+app.get("/uploads/:filename", (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(__dirname, "uploads", filename);
+  
+  // Check if file exists
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: "File not found" });
+  }
+  
+  // Get file extension to determine content type
+  const ext = path.extname(filename).toLowerCase();
+  let contentType = 'application/octet-stream'; // default
+  
+  switch (ext) {
+    case '.pdf':
+      contentType = 'application/pdf';
+      break;
+    case '.jpg':
+    case '.jpeg':
+      contentType = 'image/jpeg';
+      break;
+    case '.png':
+      contentType = 'image/png';
+      break;
+    case '.gif':
+      contentType = 'image/gif';
+      break;
+    case '.webp':
+      contentType = 'image/webp';
+      break;
+  }
+  
+  // Set headers to display inline instead of downloading
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', 'inline; filename="' + filename + '"');
+  
+  // Stream the file
+  const fileStream = fs.createReadStream(filePath);
+  fileStream.pipe(res);
+});
 
 // Serve GridFS images
 app.get("/api/images/:filename", (req, res) => {

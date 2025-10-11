@@ -64,7 +64,8 @@ class ApiService {
   }
 
   async getCurrentUser() {
-    return this.request('/auth/me');
+    const response = await this.request('/auth/me');
+    return response.user; // Extract user from the response object
   }
 
   // ==================== PROPERTIES ====================

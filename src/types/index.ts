@@ -4,7 +4,7 @@ export interface User {
   email: string;
   walletAddress: string;
   role: 'USER' | 'ADMIN' | 'AUDITOR';
-  verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  verificationStatus: 'NOT_SUBMITTED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
   twoFactorEnabled: boolean;
   twoFactorSecret?: string;
   verificationDocuments?: {
@@ -110,7 +110,7 @@ export interface Land {
     nearbyAmenities?: string[];
   };
   status: 'AVAILABLE' | 'FOR_SALE' | 'UNDER_TRANSACTION' | 'SOLD' | 'DISPUTED';
-  verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  verificationStatus: 'NOT_SUBMITTED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
   verifiedBy?: User;
   addedBy: User;
   createdAt: string;

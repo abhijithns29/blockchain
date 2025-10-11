@@ -1,12 +1,13 @@
 import React from 'react';
-import { AuthContext, useAuthProvider } from './hooks/useAuth';
+import { AuthProvider, useAuth } from './hooks/useAuth';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 
-function App() {
-  const authProvider = useAuthProvider();
+function AppContent() {
+  const { auth } = useAuth();
 
-  if (authProvider.auth.isLoading) {
+  // Show loading spinner while authentication is being checked
+  if (auth.loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -14,12 +15,22 @@ function App() {
     );
   }
 
+  // Show login page if user is not authenticated
+  if (!auth.isAuthenticated || !auth.user) {
+    return <Login />;
+  }
+
+  // Show dashboard if user is authenticated
+  return <Dashboard />;
+}
+
+function App() {
   return (
-    <AuthContext.Provider value={authProvider}>
+    <AuthProvider>
       <div className="min-h-screen bg-gray-50">
-        {authProvider.auth.isAuthenticated ? <Dashboard /> : <Login />}
+        <AppContent />
       </div>
-    </AuthContext.Provider>
+    </AuthProvider>
   );
 }
 

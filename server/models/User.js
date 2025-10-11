@@ -58,11 +58,11 @@ const userSchema = new mongoose.Schema(
     // Verification system
     verificationStatus: {
       type: String,
-      enum: ["PENDING", "VERIFIED", "REJECTED"],
+      enum: ["NOT_SUBMITTED", "PENDING", "VERIFIED", "REJECTED"],
       default: function () {
         return ["ADMIN", "AUDITOR"].includes(this.role)
           ? "VERIFIED"
-          : "PENDING";
+          : "NOT_SUBMITTED";
       },
     },
 

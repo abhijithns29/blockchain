@@ -1,13 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import apiService from '../services/api';
-
-interface User {
-  id: string;
-  email: string;
-  role: string;
-  twoFactorEnabled: boolean;
-  isVerified: boolean;
-}
+import { User } from '../types';
 
 interface AuthContextType {
   auth: {
@@ -42,6 +35,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await apiService.login(credentials);
       const { token: newToken, user: userData } = response;
+      console.log('Login response:', response);
+      console.log('User data from login:', userData);
+      console.log('User role from login:', userData?.role);
       localStorage.setItem('token', newToken);
       setToken(newToken);
       setUser(userData);
@@ -92,6 +88,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       setLoading(true);
       const userData = await apiService.getCurrentUser();
+      console.log('User data received:', userData);
+      console.log('User role:', userData?.role);
       setUser(userData);
     } catch (error) {
       console.error('Failed to refresh user:', error);
@@ -126,120 +124,5 @@ export const useAuth = () => {
   return context;
 };
 
-// Fix: Export AuthContext for use in other files
+// Export AuthContext for use in other files
 export { AuthContext };
-
-// Fix: Export useAuthProvider for use in other files
-export const useAuthProvider = () => {
-  const [auth, setAuth] = useState<{
-    user: User | null;
-    token: string | null;
-    isAuthenticated: boolean;
-    loading: boolean;
-  }>({
-    user: null,
-    token: null,
-    isAuthenticated: false,
-    loading: true,
-  });
-
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      loadUser();
-    } else {
-      setAuth(prev => ({ ...prev, loading: false }));
-    }
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const response = await apiService.getCurrentUser();
-      setAuth({
-        user: response,
-        token: localStorage.getItem('token'),
-        isAuthenticated: true,
-        loading: false,
-      });
-    } catch (error) {
-      localStorage.removeItem('token');
-      setAuth({
-        user: null,
-        token: null,
-        isAuthenticated: false,
-        loading: false,
-      });
-    }
-  };
-
-  const login = async (credentials: { email: string; password: string }) => {
-    try {
-      const response = await apiService.login(credentials);
-      localStorage.setItem('token', response.token);
-      setAuth({
-        user: response.user,
-        token: response.token,
-        isAuthenticated: true,
-        loading: false,
-      });
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const register = async (userData: any) => {
-    try {
-      const response = await apiService.register(userData);
-      localStorage.setItem('token', response.token);
-      setAuth({
-        user: response.user,
-        token: response.token,
-        isAuthenticated: true,
-        loading: false,
-      });
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const connectWallet = async () => {
-    try {
-      if (typeof window !== 'undefined' && window.ethereum) {
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        const walletAddress = accounts[0];
-        
-        const response = await apiService.verifyWallet({ walletAddress });
-        localStorage.setItem('token', response.token);
-        setAuth({
-          user: response.user,
-          token: response.token,
-          isAuthenticated: true,
-          loading: false,
-        });
-      } else {
-        throw new Error('MetaMask is not installed');
-      }
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const logout = () => {
-    localStorage.removeItem('token');
-    setAuth({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-      loading: false,
-    });
-  };
-
-  return {
-    auth,
-    login,
-    register,
-    connectWallet,
-    logout,
-    loadUser,
-  };
-};

@@ -41,6 +41,13 @@ router.post(
         });
       }
 
+      // Check if user already has a pending verification
+      if (user.verificationStatus === "PENDING") {
+        return res.status(400).json({
+          message: "Verification is already pending. Please wait for admin review.",
+        });
+      }
+
       const verificationDocuments = {};
       let documentsUploaded = 0;
 
@@ -211,7 +218,7 @@ router.post(
 router.get("/verification/pending", adminAuth, async (req, res) => {
   try {
     const pendingUsers = await User.findPendingVerifications()
-      .select("-password -loginAttempts -lockUntil")
+      .select("-password -loginAttempts -lockUntil -twoFactorSecret -twoFactorBackupCodes")
       .sort({ createdAt: -1 });
 
     res.json({ users: pendingUsers });
