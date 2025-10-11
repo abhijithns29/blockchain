@@ -8,6 +8,7 @@ const { auth, adminAuth } = require("../middleware/auth");
 const { upload, uploadToGridFS } = require("../config/gridfs");
 const PDFGenerator = require("../utils/pdfGenerator");
 const DocumentWatermark = require("../utils/documentWatermark");
+const ipfsService = require("../config/ipfs");
 const { v4: uuidv4 } = require("uuid");
 const mongoose = require("mongoose");
 
@@ -19,6 +20,8 @@ router.post("/add", adminAuth, upload.single("document"), async (req, res) => {
     console.log("=== ADDING LAND TO DATABASE ===");
     console.log("Request body:", req.body);
     console.log("File received:", req.file ? req.file.filename : "None");
+    console.log("User making request:", req.user ? req.user._id : "No user");
+    console.log("Processing step 1: Request validation");
 
     const {
       surveyNumber,
@@ -40,7 +43,10 @@ router.post("/add", adminAuth, upload.single("document"), async (req, res) => {
       electricityConnection,
     } = req.body;
 
+    console.log("Processing step 2: Field extraction completed");
+    
     // Validate required fields
+    console.log("Processing step 3: Validating required fields");
     const requiredFields = {
       surveyNumber,
       village,
@@ -62,11 +68,16 @@ router.post("/add", adminAuth, upload.single("document"), async (req, res) => {
       });
     }
 
+    console.log("Processing step 4: Required fields validation passed");
+    
     // Validate owner exists
+    console.log("Processing step 5: Validating owner exists");
     const owner = await User.findById(ownerId);
     if (!owner) {
+      console.log("❌ Owner validation failed: user not found");
       return res.status(400).json({ error: "Invalid ownerId: user not found" });
     }
+    console.log("✅ Owner validation passed:", owner.fullName);
 
     // Parse JSON strings safely
     let parsedArea = {};
@@ -101,6 +112,12 @@ router.post("/add", adminAuth, upload.single("document"), async (req, res) => {
     let originalDocument = null;
     if (req.file) {
       console.log("Processing and uploading original document...");
+      console.log("File details:", {
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        path: req.file.path
+      });
 
       try {
         // Generate watermark
@@ -139,7 +156,7 @@ router.post("/add", adminAuth, upload.single("document"), async (req, res) => {
         };
 
         console.log(
-          `Original document processed and uploaded: ${req.file.originalname}`
+          `✅ Original document processed and uploaded: ${req.file.originalname}, IPFS Hash: ${ipfsHash}`
         );
 
         // Clean up the temporary file
@@ -154,13 +171,28 @@ router.post("/add", adminAuth, upload.single("document"), async (req, res) => {
             console.error("Failed to clean up temporary file:", cleanupError);
           }
         }
+        
+        // Provide more specific error messages
+        let errorMessage = "Failed to upload document";
+        if (uploadError.message.includes("IPFS")) {
+          errorMessage = "Failed to upload document to IPFS. Please check your internet connection and try again.";
+        } else if (uploadError.message.includes("watermark")) {
+          errorMessage = "Failed to process document watermark. Please ensure the file is a valid PDF or image.";
+        } else if (uploadError.message.includes("file format")) {
+          errorMessage = "Unsupported file format. Please upload a PDF, JPEG, or PNG file.";
+        } else {
+          errorMessage = `Failed to upload document: ${uploadError.message}`;
+        }
+        
         return res.status(500).json({
-          message: `Failed to upload document: ${req.file.originalname}`,
+          message: errorMessage,
+          error: process.env.NODE_ENV === "development" ? uploadError.message : undefined,
         });
       }
     }
 
     // Create land record
+    console.log("Creating land record with processed data...");
     const landData = {
       surveyNumber: surveyNumber.trim(),
       subDivision: subDivision?.trim() || "",
@@ -284,7 +316,7 @@ router.post("/digitalize", adminAuth, async (req, res) => {
 
     const land = await Land.findById(landId).populate(
       "currentOwner",
-      "fullName email"
+      "fullName email verificationDocuments verificationStatus"
     );
 
     if (!land) {
@@ -322,19 +354,35 @@ router.post("/digitalize", adminAuth, async (req, res) => {
     );
 
     // Generate digital ownership certificate
-    const certificatePDF = await PDFGenerator.generateLandCertificate(
-      land,
-      qrCodeDataURL
-    );
-    const watermarkedPDF = await DocumentWatermark.addWatermarkToPDF(
-      certificatePDF,
-      watermarkText
-    );
+    console.log("Generating certificate PDF...");
+    let certificatePDF;
+    try {
+      certificatePDF = await PDFGenerator.generateLandCertificate(
+        land,
+        qrCodeDataURL
+      );
+      console.log("Certificate PDF generated, size:", certificatePDF.length);
+    } catch (pdfError) {
+      console.error("PDF generation error:", pdfError);
+      throw new Error(`Failed to generate certificate PDF: ${pdfError.message}`);
+    }
+    
+    console.log("Skipping watermark for testing...");
+    let watermarkedPDF = certificatePDF; // Skip watermark for now
+    console.log("Using PDF without watermark, size:", watermarkedPDF.length);
 
-    const certificateHash = await ipfsService.uploadFile(
-      watermarkedPDF,
-      `land-certificate-${land.assetId}.pdf`
-    );
+    console.log("Uploading certificate to IPFS...");
+    let certificateHash;
+    try {
+      certificateHash = await ipfsService.uploadFile(
+        watermarkedPDF,
+        `land-certificate-${land.assetId}.pdf`
+      );
+      console.log("Certificate uploaded to IPFS, hash:", certificateHash);
+    } catch (ipfsError) {
+      console.error("IPFS upload error:", ipfsError);
+      throw new Error(`Failed to upload certificate to IPFS: ${ipfsError.message}`);
+    }
 
     // Update land with digital document info
     land.digitalDocument = {
