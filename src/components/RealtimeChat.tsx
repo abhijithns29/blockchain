@@ -324,23 +324,33 @@ const RealtimeChat: React.FC<RealtimeChatProps> = ({
             return (
               <div
                 key={message._id}
-                className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                className={`flex mb-4 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
               >
-                <div
-                  className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                    isOwnMessage
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-200 text-gray-900'
-                  }`}
-                >
-                  <p className="text-sm">{message.message}</p>
-                  <p
-                    className={`text-xs mt-1 ${
-                      isOwnMessage ? 'text-blue-100' : 'text-gray-500'
+                <div className={`flex items-end ${isOwnMessage ? 'flex-row-reverse' : 'flex-row'}`}>
+                  {/* Avatar */}
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+                    isOwnMessage ? 'bg-blue-600 text-white ml-2' : 'bg-gray-400 text-white mr-2'
+                  }`}>
+                    {(message.sender as any)?.fullName ? (message.sender as any).fullName.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                  
+                  {/* Message bubble */}
+                  <div
+                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                      isOwnMessage
+                        ? 'bg-blue-500 text-white rounded-br-md'
+                        : 'bg-gray-100 text-gray-900 rounded-bl-md'
                     }`}
                   >
-                    {formatTime(message.timestamp)}
-                  </p>
+                    <p className="text-sm leading-relaxed">{message.message}</p>
+                    <p
+                      className={`text-xs mt-1 ${
+                        isOwnMessage ? 'text-blue-100' : 'text-gray-500'
+                      }`}
+                    >
+                      {formatTime(message.timestamp)}
+                    </p>
+                  </div>
                 </div>
               </div>
             );
@@ -349,15 +359,23 @@ const RealtimeChat: React.FC<RealtimeChatProps> = ({
         
         {/* Typing Indicator */}
         {otherUserTyping && (
-          <div className="flex justify-start">
-            <div className="bg-gray-200 text-gray-900 px-4 py-2 rounded-lg">
-              <div className="flex items-center gap-1">
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+          <div className="flex mb-4 justify-start">
+            <div className="flex items-end flex-row">
+              {/* Avatar */}
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium bg-gray-400 text-white mr-2">
+                ?
+              </div>
+              
+              {/* Typing bubble */}
+              <div className="bg-gray-100 text-gray-900 px-4 py-2 rounded-2xl rounded-bl-md">
+                <div className="flex items-center gap-1">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  </div>
+                  <span className="text-xs text-gray-600 ml-2">typing...</span>
                 </div>
-                <span className="text-xs text-gray-600 ml-2">typing...</span>
               </div>
             </div>
           </div>

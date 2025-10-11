@@ -313,34 +313,55 @@ const ChatSystem: React.FC = () => {
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {selectedChat.messages.map((message, index) => (
-                  <div
-                    key={index}
-                    className={`flex ${message.sender?.id === auth.user?.id ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                      message.sender?.id === auth.user?.id
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-900'
-                    }`}>
-                      <div className="flex items-center mb-1">
-                        {getMessageTypeIcon(message.messageType)}
-                        <span className="ml-1 text-xs font-medium">
-                          {message.sender?.fullName || 'Unknown'}
-                        </span>
+                {selectedChat.messages.map((message, index) => {
+                  const isOwnMessage = message.sender?.id === auth.user?.id;
+                  return (
+                    <div
+                      key={index}
+                      className={`flex mb-4 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div className={`flex items-end ${isOwnMessage ? 'flex-row-reverse' : 'flex-row'}`}>
+                        {/* Avatar */}
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+                          isOwnMessage ? 'bg-blue-600 text-white ml-2' : 'bg-gray-400 text-white mr-2'
+                        }`}>
+                          {message.sender?.fullName ? message.sender.fullName.charAt(0).toUpperCase() : 'U'}
+                        </div>
+                        
+                        {/* Message bubble */}
+                        <div
+                          className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                            isOwnMessage
+                              ? 'bg-blue-500 text-white rounded-br-md'
+                              : 'bg-gray-100 text-gray-900 rounded-bl-md'
+                          }`}
+                        >
+                          {/* Message type icon and sender name */}
+                          <div className="flex items-center mb-1">
+                            {getMessageTypeIcon(message.messageType)}
+                            <span className="ml-1 text-xs font-medium opacity-90">
+                              {message.sender?.fullName || 'Unknown'}
+                            </span>
+                          </div>
+                          
+                          <p className="text-sm leading-relaxed">{message.message}</p>
+                          
+                          {message.offerAmount && (
+                            <p className="text-xs mt-1 font-medium">
+                              Amount: {formatPrice(message.offerAmount)}
+                            </p>
+                          )}
+                          
+                          <p className={`text-xs mt-1 ${
+                            isOwnMessage ? 'text-blue-100' : 'text-gray-500'
+                          }`}>
+                            {new Date(message.timestamp).toLocaleTimeString()}
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-sm">{message.message}</p>
-                      {message.offerAmount && (
-                        <p className="text-xs mt-1 font-medium">
-                          Amount: {formatPrice(message.offerAmount)}
-                        </p>
-                      )}
-                      <p className="text-xs mt-1 opacity-75">
-                        {new Date(message.timestamp).toLocaleTimeString()}
-                      </p>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Offer Input */}
