@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
+import LandDetailPage from './components/LandDetailPage';
 
 function AppContent() {
   const { auth } = useAuth();
+  const [currentPage, setCurrentPage] = useState('dashboard');
+  const [landId, setLandId] = useState('');
 
   // Show loading spinner while authentication is being checked
   if (auth.loading) {
@@ -20,8 +23,23 @@ function AppContent() {
     return <Login />;
   }
 
-  // Show dashboard if user is authenticated
-  return <Dashboard />;
+  // Handle navigation
+  const navigateToLandDetails = (id: string) => {
+    setLandId(id);
+    setCurrentPage('land-details');
+  };
+
+  const navigateToDashboard = () => {
+    setCurrentPage('dashboard');
+  };
+
+  // Show different pages based on current page state
+  if (currentPage === 'land-details') {
+    return <LandDetailPage landId={landId} onBack={navigateToDashboard} />;
+  }
+
+  // Show dashboard with navigation capability
+  return <Dashboard onNavigateToLand={navigateToLandDetails} />;
 }
 
 function App() {

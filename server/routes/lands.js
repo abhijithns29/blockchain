@@ -1469,6 +1469,148 @@ router.get("/owned-by/:userId", auth, async (req, res) => {
   }
 });
 
+// Edit listing (owner only)
+router.put('/:landId/edit-listing', auth, async (req, res) => {
+  try {
+    const { landId } = req.params;
+    const { askingPrice, description, features, nearbyAmenities, virtualTourUrl } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(landId)) {
+      return res.status(400).json({ error: 'Invalid land ID' });
+    }
+
+    const land = await Land.findById(landId);
+    if (!land) {
+      return res.status(404).json({ error: 'Land not found' });
+    }
+
+    // Check if user is the owner
+    if (land.currentOwner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Only the owner can edit this listing' });
+    }
+
+    // Check if land is for sale
+    if (!land.marketInfo.isForSale) {
+      return res.status(400).json({ error: 'Land is not listed for sale' });
+    }
+
+    // Update market info
+    if (askingPrice !== undefined) {
+      land.marketInfo.askingPrice = parseFloat(askingPrice);
+      // Recalculate price per sqft
+      const totalSqft = land.getTotalAreaSqft();
+      if (totalSqft > 0) {
+        land.marketInfo.pricePerSqft = land.marketInfo.askingPrice / totalSqft;
+      }
+    }
+
+    if (description !== undefined) {
+      land.marketInfo.description = description;
+    }
+
+    if (features !== undefined) {
+      try {
+        land.marketInfo.features = Array.isArray(features) ? features : JSON.parse(features);
+      } catch (error) {
+        land.marketInfo.features = features.split(',').map(f => f.trim());
+      }
+    }
+
+    if (nearbyAmenities !== undefined) {
+      try {
+        land.marketInfo.nearbyAmenities = Array.isArray(nearbyAmenities) ? nearbyAmenities : JSON.parse(nearbyAmenities);
+      } catch (error) {
+        land.marketInfo.nearbyAmenities = nearbyAmenities.split(',').map(a => a.trim());
+      }
+    }
+
+    if (virtualTourUrl !== undefined) {
+      land.marketInfo.virtualTourUrl = virtualTourUrl;
+    }
+
+    await land.save();
+
+    res.json({
+      success: true,
+      message: 'Listing updated successfully',
+      land
+    });
+  } catch (error) {
+    console.error('Edit listing error:', error);
+    res.status(500).json({ error: 'Failed to update listing' });
+  }
+});
+
+// Remove listing (owner only)
+router.delete('/:landId/remove-listing', auth, async (req, res) => {
+  try {
+    const { landId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(landId)) {
+      return res.status(400).json({ error: 'Invalid land ID' });
+    }
+
+    const land = await Land.findById(landId);
+    if (!land) {
+      return res.status(404).json({ error: 'Land not found' });
+    }
+
+    // Check if user is the owner
+    if (land.currentOwner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Only the owner can remove this listing' });
+    }
+
+    // Check if land is for sale
+    if (!land.marketInfo.isForSale) {
+      return res.status(400).json({ error: 'Land is not listed for sale' });
+    }
+
+    // Remove from sale
+    land.marketInfo.isForSale = false;
+    land.marketInfo.listedDate = null;
+    land.status = 'AVAILABLE';
+
+    await land.save();
+
+    res.json({
+      success: true,
+      message: 'Listing removed successfully',
+      land
+    });
+  } catch (error) {
+    console.error('Remove listing error:', error);
+    res.status(500).json({ error: 'Failed to remove listing' });
+  }
+});
+
+// Get single land details for detailed view
+router.get('/:landId/details', async (req, res) => {
+  try {
+    const { landId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(landId)) {
+      return res.status(400).json({ error: 'Invalid land ID' });
+    }
+
+    const land = await Land.findById(landId)
+      .populate('currentOwner', 'fullName email verificationStatus')
+      .populate('addedBy', 'fullName')
+      .populate('verifiedBy', 'fullName');
+
+    if (!land) {
+      return res.status(404).json({ error: 'Land not found' });
+    }
+
+    res.json({
+      success: true,
+      land
+    });
+  } catch (error) {
+    console.error('Get land details error:', error);
+    res.status(500).json({ error: 'Failed to fetch land details' });
+  }
+});
+
 // Fix: Add a catch-all route at the end to return JSON for unknown API endpoints
 router.use((req, res, next) => {
   if (req.originalUrl.startsWith("/api/")) {

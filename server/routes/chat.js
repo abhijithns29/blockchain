@@ -47,6 +47,14 @@ router.post('/start', auth, async (req, res) => {
 
     await chat.populate(['buyer', 'seller', 'landId']);
 
+    console.log('Chat object before sending:', {
+      _id: chat._id,
+      id: chat.id,
+      landId: chat.landId,
+      buyer: chat.buyer,
+      seller: chat.seller
+    });
+
     res.json({
       message: 'Chat started successfully',
       chat
@@ -70,6 +78,13 @@ router.get('/my-chats', auth, async (req, res) => {
     .populate('seller', 'fullName email')
     .populate('landId', 'assetId village district marketInfo')
     .sort({ updatedAt: -1 });
+
+    console.log('My chats response:', chats.map(chat => ({
+      _id: chat._id,
+      buyer: chat.buyer,
+      seller: chat.seller,
+      landId: chat.landId
+    })));
 
     res.json({ chats });
   } catch (error) {

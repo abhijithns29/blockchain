@@ -151,6 +151,14 @@ const userSchema = new mongoose.Schema(
       },
     ],
 
+    // Liked/favorite lands
+    likedLands: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Land",
+      },
+    ],
+
     // Account security
     isActive: { type: Boolean, default: true },
     lastLogin: Date,

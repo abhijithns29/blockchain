@@ -299,6 +299,72 @@ class ApiService {
     return this.request(`/lands/verify/${assetId}`);
   }
 
+  // Like/Unlike land
+  async toggleLandLike(landId: string) {
+    return this.request(`/users/liked-lands/${landId}`, {
+      method: 'POST',
+    });
+  }
+
+  // Get user's liked lands
+  async getLikedLands(params: any = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/users/liked-lands${queryString ? `?${queryString}` : ''}`);
+  }
+
+  // Get user's own listings
+  async getMyListings(params: any = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/users/my-listings${queryString ? `?${queryString}` : ''}`);
+  }
+
+  // Remove listing
+  async removeListing(landId: string) {
+    return this.request(`/lands/${landId}/remove-listing`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Edit listing
+  async editListing(landId: string, data: any) {
+    return this.request(`/lands/${landId}/edit-listing`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Get land details
+  async getLandDetails(landId: string) {
+    return this.request(`/lands/${landId}/details`);
+  }
+
+  // Chat methods
+  async startChat(landId: string) {
+    return this.request('/chats/start', {
+      method: 'POST',
+      body: JSON.stringify({ landId }),
+    });
+  }
+
+  async getChat(chatId: string) {
+    return this.request(`/chats/${chatId}`);
+  }
+
+  async getChats() {
+    return this.request('/chats/my-chats');
+  }
+
+  async getMyChats() {
+    return this.request('/chats/my-chats');
+  }
+
+  async sendMessage(chatId: string, messageData: any) {
+    return this.request(`/chats/${chatId}/message`, {
+      method: 'POST',
+      body: JSON.stringify(messageData),
+    });
+  }
+
   async getNearbyLands(latitude: number, longitude: number, maxDistance?: number) {
     const params = new URLSearchParams({
       latitude: latitude.toString(),
@@ -308,45 +374,23 @@ class ApiService {
     return this.request(`/lands/nearby?${params}`);
   }
 
-  // ==================== CHAT ====================
-  async startChat(landId: string) {
-    return this.request('/chat/start', {
-      method: 'POST',
-      body: JSON.stringify({ landId }),
-    });
-  }
-
-  async getMyChats() {
-    return this.request('/chat/my-chats');
-  }
-
-  async getChat(chatId: string) {
-    return this.request(`/chat/${chatId}`);
-  }
-
-  async sendMessage(chatId: string, messageData: any) {
-    return this.request(`/chat/${chatId}/message`, {
-      method: 'POST',
-      body: JSON.stringify(messageData),
-    });
-  }
 
   async makeOffer(chatId: string, offerAmount: number) {
-    return this.request(`/chat/${chatId}/offer`, {
+    return this.request(`/chats/${chatId}/offer`, {
       method: 'POST',
       body: JSON.stringify({ offerAmount }),
     });
   }
 
   async makeCounterOffer(chatId: string, counterAmount: number) {
-    return this.request(`/chat/${chatId}/counter-offer`, {
+    return this.request(`/chats/${chatId}/counter-offer`, {
       method: 'POST',
       body: JSON.stringify({ counterAmount }),
     });
   }
 
   async acceptOffer(chatId: string) {
-    return this.request(`/chat/${chatId}/accept`, {
+    return this.request(`/chats/${chatId}/accept`, {
       method: 'POST',
     });
   }

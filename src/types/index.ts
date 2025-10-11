@@ -108,6 +108,7 @@ export interface Land {
     images?: string[];
     features?: string[];
     nearbyAmenities?: string[];
+    virtualTourUrl?: string;
   };
   status: 'AVAILABLE' | 'FOR_SALE' | 'UNDER_TRANSACTION' | 'SOLD' | 'DISPUTED';
   verificationStatus: 'NOT_SUBMITTED' | 'PENDING' | 'VERIFIED' | 'REJECTED';

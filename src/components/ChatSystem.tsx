@@ -20,9 +20,9 @@ const ChatSystem: React.FC = () => {
 
   useEffect(() => {
     if (selectedChat) {
-      loadChatDetails(selectedChat.id);
+      loadChatDetails(selectedChat._id);
     }
-  }, [selectedChat?.id]);
+  }, [selectedChat?._id]);
 
   const loadChats = async () => {
     try {
@@ -49,12 +49,12 @@ const ChatSystem: React.FC = () => {
     if (!selectedChat || !newMessage.trim()) return;
 
     try {
-      await apiService.sendMessage(selectedChat.id, {
+      await apiService.sendMessage(selectedChat._id, {
         message: newMessage,
         messageType: 'TEXT'
       });
       setNewMessage('');
-      loadChatDetails(selectedChat.id);
+      loadChatDetails(selectedChat._id);
     } catch (error: any) {
       setError(error.message || 'Failed to send message');
     }
@@ -64,10 +64,10 @@ const ChatSystem: React.FC = () => {
     if (!selectedChat || !offerAmount) return;
 
     try {
-      await apiService.makeOffer(selectedChat.id, parseFloat(offerAmount));
+      await apiService.makeOffer(selectedChat._id, parseFloat(offerAmount));
       setOfferAmount('');
       setShowOfferInput(false);
-      loadChatDetails(selectedChat.id);
+      loadChatDetails(selectedChat._id);
     } catch (error: any) {
       setError(error.message || 'Failed to make offer');
     }
@@ -77,10 +77,10 @@ const ChatSystem: React.FC = () => {
     if (!selectedChat || !offerAmount) return;
 
     try {
-      await apiService.makeCounterOffer(selectedChat.id, parseFloat(offerAmount));
+      await apiService.makeCounterOffer(selectedChat._id, parseFloat(offerAmount));
       setOfferAmount('');
       setShowOfferInput(false);
-      loadChatDetails(selectedChat.id);
+      loadChatDetails(selectedChat._id);
     } catch (error: any) {
       setError(error.message || 'Failed to make counter offer');
     }
@@ -90,8 +90,8 @@ const ChatSystem: React.FC = () => {
     if (!selectedChat) return;
 
     try {
-      await apiService.acceptOffer(selectedChat.id);
-      loadChatDetails(selectedChat.id);
+      await apiService.acceptOffer(selectedChat._id);
+      loadChatDetails(selectedChat._id);
       loadChats(); // Refresh chat list
     } catch (error: any) {
       setError(error.message || 'Failed to accept offer');
@@ -102,14 +102,17 @@ const ChatSystem: React.FC = () => {
     if (!selectedChat) return;
 
     try {
-      await apiService.initiateLandTransaction(selectedChat.id);
-      loadChatDetails(selectedChat.id);
+      await apiService.initiateLandTransaction(selectedChat._id);
+      loadChatDetails(selectedChat._id);
     } catch (error: any) {
       setError(error.message || 'Failed to initiate transaction');
     }
   };
 
-  const formatPrice = (price: number) => {
+  const formatPrice = (price: number | undefined) => {
+    if (!price || price === 0) {
+      return '₹0';
+    }
     if (price >= 10000000) {
       return `₹${(price / 10000000).toFixed(1)} Cr`;
     } else if (price >= 100000) {
@@ -134,21 +137,21 @@ const ChatSystem: React.FC = () => {
   };
 
   const canMakeOffer = (chat: Chat) => {
-    return chat.buyer.id === auth.user?.id && 
+    return chat.buyer?.id === auth.user?.id && 
            (!chat.currentOffer || chat.currentOffer.status !== 'PENDING');
   };
 
   const canMakeCounterOffer = (chat: Chat) => {
-    return chat.seller.id === auth.user?.id && 
+    return chat.seller?.id === auth.user?.id && 
            chat.currentOffer && 
            chat.currentOffer.status === 'PENDING' &&
-           chat.currentOffer.offeredBy.id !== auth.user?.id;
+           chat.currentOffer.offeredBy?.id !== auth.user?.id;
   };
 
   const canAcceptOffer = (chat: Chat) => {
     return chat.currentOffer && 
            chat.currentOffer.status === 'PENDING' &&
-           chat.currentOffer.offeredBy.id !== auth.user?.id;
+           chat.currentOffer.offeredBy?.id !== auth.user?.id;
   };
 
   if (loading) {
@@ -188,10 +191,10 @@ const ChatSystem: React.FC = () => {
             ) : (
               chats.map((chat) => (
                 <div
-                  key={chat.id}
+                  key={chat._id}
                   onClick={() => setSelectedChat(chat)}
                   className={`p-4 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
-                    selectedChat?.id === chat.id ? 'bg-blue-50 border-blue-200' : ''
+                    selectedChat?._id === chat._id ? 'bg-blue-50 border-blue-200' : ''
                   }`}
                 >
                   <div className="flex justify-between items-start mb-2">
@@ -207,13 +210,13 @@ const ChatSystem: React.FC = () => {
                     </span>
                   </div>
                   <p className="text-sm text-gray-600 mb-1">
-                    Asset ID: {chat.landId.assetId}
+                    Asset ID: {chat.landId?.assetId || 'N/A'}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {chat.buyer.id === auth.user?.id ? 'Seller' : 'Buyer'}: {' '}
-                    {chat.buyer.id === auth.user?.id ? chat.seller.fullName : chat.buyer.fullName}
+                    {chat.buyer?.id === auth.user?.id ? 'Seller' : 'Buyer'}: {' '}
+                    {chat.buyer?.id === auth.user?.id ? (chat.seller?.fullName || 'Unknown') : (chat.buyer?.fullName || 'Unknown')}
                   </p>
-                  {chat.currentOffer && (
+                  {chat.currentOffer && chat.currentOffer.amount && (
                     <p className="text-sm font-medium text-green-600 mt-1">
                       Current Offer: {formatPrice(chat.currentOffer.amount)}
                     </p>
@@ -236,9 +239,9 @@ const ChatSystem: React.FC = () => {
                       {selectedChat.landId.village}, {selectedChat.landId.district}
                     </h2>
                     <p className="text-sm text-gray-600">
-                      Asset ID: {selectedChat.landId.assetId} • {' '}
-                      {selectedChat.buyer.id === auth.user?.id ? 'Seller' : 'Buyer'}: {' '}
-                      {selectedChat.buyer.id === auth.user?.id ? selectedChat.seller.fullName : selectedChat.buyer.fullName}
+                      Asset ID: {selectedChat.landId?.assetId || 'N/A'} • {' '}
+                      {selectedChat.buyer?.id === auth.user?.id ? 'Seller' : 'Buyer'}: {' '}
+                      {selectedChat.buyer?.id === auth.user?.id ? (selectedChat.seller?.fullName || 'Unknown') : (selectedChat.buyer?.fullName || 'Unknown')}
                     </p>
                   </div>
                   {selectedChat.landId.marketInfo.askingPrice && (
@@ -260,7 +263,7 @@ const ChatSystem: React.FC = () => {
                           Current Offer: {formatPrice(selectedChat.currentOffer.amount)}
                         </p>
                         <p className="text-xs text-gray-500">
-                          By: {selectedChat.currentOffer.offeredBy.fullName} • Status: {selectedChat.currentOffer.status}
+                          By: {selectedChat.currentOffer.offeredBy?.fullName || 'Unknown'} • Status: {selectedChat.currentOffer.status}
                         </p>
                       </div>
                       <div className="flex space-x-2">
@@ -313,17 +316,17 @@ const ChatSystem: React.FC = () => {
                 {selectedChat.messages.map((message, index) => (
                   <div
                     key={index}
-                    className={`flex ${message.sender.id === auth.user?.id ? 'justify-end' : 'justify-start'}`}
+                    className={`flex ${message.sender?.id === auth.user?.id ? 'justify-end' : 'justify-start'}`}
                   >
                     <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                      message.sender.id === auth.user?.id
+                      message.sender?.id === auth.user?.id
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-200 text-gray-900'
                     }`}>
                       <div className="flex items-center mb-1">
                         {getMessageTypeIcon(message.messageType)}
                         <span className="ml-1 text-xs font-medium">
-                          {message.sender.fullName}
+                          {message.sender?.fullName || 'Unknown'}
                         </span>
                       </div>
                       <p className="text-sm">{message.message}</p>

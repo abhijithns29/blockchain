@@ -3,6 +3,8 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const path = require("path");
 const fs = require("fs");
+const http = require("http");
+const socketIo = require("socket.io");
 const connectDB = require("./config/database");
 const blockchainService = require("./config/blockchain");
 const ipfsService = require("./config/ipfs");
@@ -69,6 +71,13 @@ const initializeServices = async () => {
 };
 
 const app = express();
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    methods: ["GET", "POST"]
+  }
+});
 
 // Middleware
 app.use(
@@ -235,6 +244,97 @@ app.use("*", (req, res) => {
   });
 });
 
+// Socket.io connection handling
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+
+  // Join chat room
+  socket.on('join-chat', async (data) => {
+    try {
+      const { chatId, userId } = data;
+      
+      // Verify user authentication (you might want to add JWT verification here)
+      if (!userId) {
+        socket.emit('error', { message: 'User not authenticated' });
+        return;
+      }
+
+      // Join the chat room
+      socket.join(`chat-${chatId}`);
+      console.log(`User ${userId} joined chat ${chatId}`);
+      
+      // Notify others in the room
+      socket.to(`chat-${chatId}`).emit('user-joined', { userId });
+    } catch (error) {
+      console.error('Join chat error:', error);
+      socket.emit('error', { message: 'Failed to join chat' });
+    }
+  });
+
+  // Handle new messages
+  socket.on('send-message', async (data) => {
+    try {
+      const { chatId, userId, message, messageType = 'TEXT' } = data;
+      
+      console.log('Received send-message:', { chatId, userId, message, messageType });
+      
+      if (!chatId || !userId || !message) {
+        console.log('Missing required fields:', { chatId, userId, message });
+        socket.emit('error', { message: 'Missing required fields' });
+        return;
+      }
+
+      // Save message to database
+      const Chat = require('./models/Chat');
+      console.log('Looking for chat with ID:', chatId);
+      const chat = await Chat.findById(chatId);
+      
+      if (!chat) {
+        socket.emit('error', { message: 'Chat not found' });
+        return;
+      }
+
+      // Verify user is participant
+      if (!chat.isParticipant(userId)) {
+        socket.emit('error', { message: 'Not authorized to send messages' });
+        return;
+      }
+
+      // Add message
+      const newMessage = chat.addMessage(userId, message, messageType);
+      await chat.save();
+
+      // Emit to all users in the chat room
+      io.to(`chat-${chatId}`).emit('new-message', {
+        chatId,
+        message: newMessage,
+        timestamp: new Date()
+      });
+
+      console.log(`Message sent in chat ${chatId} by user ${userId}`);
+    } catch (error) {
+      console.error('Send message error:', error);
+      socket.emit('error', { message: 'Failed to send message' });
+    }
+  });
+
+  // Handle typing indicators
+  socket.on('typing-start', (data) => {
+    const { chatId, userId } = data;
+    socket.to(`chat-${chatId}`).emit('user-typing', { userId, isTyping: true });
+  });
+
+  socket.on('typing-stop', (data) => {
+    const { chatId, userId } = data;
+    socket.to(`chat-${chatId}`).emit('user-typing', { userId, isTyping: false });
+  });
+
+  // Handle disconnect
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
+  });
+});
+
 const PORT = process.env.PORT || 5000;
 
 // Start server
@@ -242,7 +342,7 @@ const startServer = async () => {
   try {
     await initializeServices();
 
-    app.listen(PORT, "0.0.0.0", () => {
+    server.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Land Registry Server running on port ${PORT}`);
       console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`🌐 API URL: http://localhost:${PORT}/api`);

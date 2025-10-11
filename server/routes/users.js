@@ -470,4 +470,121 @@ router.get("/verify/:id", async (req, res) => {
   }
 });
 
+// Like/Unlike a land
+router.post('/liked-lands/:landId', auth, async (req, res) => {
+  try {
+    const { landId } = req.params;
+    const userId = req.user._id;
+
+    if (!mongoose.Types.ObjectId.isValid(landId)) {
+      return res.status(400).json({ error: 'Invalid land ID' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const landIndex = user.likedLands.indexOf(landId);
+    const isLiked = landIndex !== -1;
+
+    if (isLiked) {
+      // Unlike the land
+      user.likedLands.splice(landIndex, 1);
+      await user.save();
+      res.json({ success: true, liked: false, message: 'Land removed from favorites' });
+    } else {
+      // Like the land
+      user.likedLands.push(landId);
+      await user.save();
+      res.json({ success: true, liked: true, message: 'Land added to favorites' });
+    }
+  } catch (error) {
+    console.error('Like/unlike land error:', error);
+    res.status(500).json({ error: 'Failed to update land like status' });
+  }
+});
+
+// Get user's liked lands
+router.get('/liked-lands', auth, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { page = 1, limit = 20 } = req.query;
+
+    const user = await User.findById(userId).populate({
+      path: 'likedLands',
+      populate: {
+        path: 'currentOwner',
+        select: 'fullName email'
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Filter only lands that are for sale
+    const likedLandsForSale = user.likedLands.filter(land => 
+      land && land.marketInfo && land.marketInfo.isForSale
+    );
+
+    // Pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + parseInt(limit);
+    const paginatedLands = likedLandsForSale.slice(startIndex, endIndex);
+
+    res.json({
+      success: true,
+      lands: paginatedLands,
+      pagination: {
+        total: likedLandsForSale.length,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(likedLandsForSale.length / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get liked lands error:', error);
+    res.status(500).json({ error: 'Failed to fetch liked lands' });
+  }
+});
+
+// Get user's own listings (lands for sale)
+router.get('/my-listings', auth, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { page = 1, limit = 20 } = req.query;
+
+    const Land = require('../models/Land');
+    
+    const query = {
+      currentOwner: userId,
+      'marketInfo.isForSale': true,
+      status: 'FOR_SALE'
+    };
+
+    const lands = await Land.find(query)
+      .populate('currentOwner', 'fullName email')
+      .sort({ 'marketInfo.listedDate': -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await Land.countDocuments(query);
+
+    res.json({
+      success: true,
+      lands,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get my listings error:', error);
+    res.status(500).json({ error: 'Failed to fetch your listings' });
+  }
+});
+
 module.exports = router;

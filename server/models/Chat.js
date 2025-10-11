@@ -4,7 +4,7 @@ const chatSchema = new mongoose.Schema({
   // Chat participants
   landId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'DigitizedLand',
+    ref: 'Land',
     required: true
   },
   

@@ -26,7 +26,11 @@ import QRScanner from "./QRScanner";
 import TwoFactorAuth from "./TwoFactorAuth";
 import AuditorDashboard from "./AuditorDashboard";
 
-const Dashboard: React.FC = () => {
+interface DashboardProps {
+  onNavigateToLand?: (landId: string) => void;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ onNavigateToLand }) => {
   const { auth } = useAuth();
   const [activeTab, setActiveTab] = useState(
     auth.user?.role === "ADMIN" ? "land-database" : "marketplace"
@@ -71,7 +75,7 @@ const Dashboard: React.FC = () => {
           </div>
         );
       case "marketplace":
-        return <LandMarketplace />;
+        return <LandMarketplace onNavigateToLand={onNavigateToLand} />;
       case "chats":
         return <ChatSystem />;
       case "transactions":

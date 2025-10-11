@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, MapPin, MessageCircle, Eye, Heart, ShoppingCart, Camera, Star, X } from 'lucide-react';
+import { Search, Filter, MapPin, MessageCircle, Eye, Heart, ShoppingCart, Camera, Star, X, Edit2, Trash2 } from 'lucide-react';
 import { Land } from '../types';
-import { useAuth } from '../hooks/useAuth';
 import apiService from '../services/api';
-import ChatSystem from './ChatSystem';
+import RealtimeChat from './RealtimeChat';
 
 interface MarketplaceFilters {
   minPrice: string;
@@ -15,9 +14,14 @@ interface MarketplaceFilters {
   maxArea: string;
 }
 
-const LandMarketplace: React.FC = () => {
-  const { auth } = useAuth();
+interface LandMarketplaceProps {
+  onNavigateToLand?: (landId: string) => void;
+}
+
+const LandMarketplace: React.FC<LandMarketplaceProps> = ({ onNavigateToLand }) => {
   const [lands, setLands] = useState<Land[]>([]);
+  const [myListings, setMyListings] = useState<Land[]>([]);
+  const [likedLands, setLikedLands] = useState<Land[]>([]);
   const [filteredLands, setFilteredLands] = useState<Land[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -25,6 +29,7 @@ const LandMarketplace: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedLand, setSelectedLand] = useState<Land | null>(null);
   const [showChat, setShowChat] = useState(false);
+  const [activeTab, setActiveTab] = useState<'browse' | 'my-ads' | 'liked'>('browse');
   const [filters, setFilters] = useState<MarketplaceFilters>({
     minPrice: '',
     maxPrice: '',
@@ -36,12 +41,18 @@ const LandMarketplace: React.FC = () => {
   });
 
   useEffect(() => {
-    loadMarketplaceLands();
-  }, []);
+    if (activeTab === 'browse') {
+      loadMarketplaceLands();
+    } else if (activeTab === 'my-ads') {
+      loadMyListings();
+    } else if (activeTab === 'liked') {
+      loadLikedLands();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     filterLands();
-  }, [lands, searchTerm, filters]);
+  }, [lands, myListings, likedLands, searchTerm, filters, activeTab]);
 
   const loadMarketplaceLands = async () => {
     try {
@@ -55,8 +66,36 @@ const LandMarketplace: React.FC = () => {
     }
   };
 
+  const loadMyListings = async () => {
+    try {
+      setLoading(true);
+      const response = await apiService.getMyListings({ limit: 100 });
+      setMyListings(response.lands || []);
+    } catch (error: any) {
+      setError(error.message || 'Failed to load your listings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadLikedLands = async () => {
+    try {
+      setLoading(true);
+      const response = await apiService.getLikedLands({ limit: 100 });
+      setLikedLands(response.lands || []);
+    } catch (error: any) {
+      setError(error.message || 'Failed to load liked lands');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filterLands = () => {
-    let filtered = lands.filter(land => {
+    const sourceLands = activeTab === 'browse' ? lands : 
+                       activeTab === 'my-ads' ? myListings : 
+                       likedLands;
+    
+    let filtered = sourceLands.filter(land => {
       // Search term filter
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
@@ -152,6 +191,48 @@ const LandMarketplace: React.FC = () => {
     // You can redirect to a purchase flow or show a modal
   };
 
+  const handleLikeLand = async (land: Land) => {
+    try {
+      if (land._id) {
+        await apiService.toggleLandLike(land._id);
+        // Refresh the current tab data
+        if (activeTab === 'browse') {
+          loadMarketplaceLands();
+        } else if (activeTab === 'liked') {
+          loadLikedLands();
+        }
+      }
+    } catch (error: any) {
+      setError(error.message || 'Failed to update like status');
+    }
+  };
+
+  const handleEditListing = (land: Land) => {
+    // Implement edit listing functionality
+    console.log('Edit listing clicked for land:', land.assetId);
+    // You can open an edit modal or redirect to edit page
+  };
+
+  const handleRemoveListing = async (land: Land) => {
+    if (window.confirm('Are you sure you want to remove this listing?')) {
+      try {
+        if (land._id) {
+          await apiService.removeListing(land._id);
+          loadMyListings(); // Refresh the list
+        }
+      } catch (error: any) {
+        setError(error.message || 'Failed to remove listing');
+      }
+    }
+  };
+
+  const handleViewDetails = (land: Land) => {
+    // Navigate to detailed view page
+    if (land._id && onNavigateToLand) {
+      onNavigateToLand(land._id);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-96">
@@ -180,6 +261,42 @@ const LandMarketplace: React.FC = () => {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Land Marketplace</h1>
         <p className="text-gray-600">Discover verified lands for sale across India</p>
+        
+        {/* Tab Navigation */}
+        <div className="mt-6">
+          <nav className="flex space-x-8">
+            <button
+              onClick={() => setActiveTab('browse')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'browse'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Browse All
+            </button>
+            <button
+              onClick={() => setActiveTab('my-ads')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'my-ads'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              My Ads
+            </button>
+            <button
+              onClick={() => setActiveTab('liked')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'liked'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Liked Ads
+            </button>
+          </nav>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -305,7 +422,15 @@ const LandMarketplace: React.FC = () => {
       {/* Results Count */}
       <div className="mb-4">
         <p className="text-gray-600">
-          Showing {filteredLands.length} of {lands.length} lands for sale
+          Showing {filteredLands.length} of {
+            activeTab === 'browse' ? lands.length :
+            activeTab === 'my-ads' ? myListings.length :
+            likedLands.length
+          } {
+            activeTab === 'browse' ? 'lands for sale' :
+            activeTab === 'my-ads' ? 'your listings' :
+            'liked lands'
+          }
         </p>
       </div>
 
@@ -324,8 +449,13 @@ const LandMarketplace: React.FC = () => {
             <LandCard
               key={land._id}
               land={land}
+              activeTab={activeTab}
               onChat={() => handleChatWithSeller(land)}
               onBuy={() => handleBuyNow(land)}
+              onLike={handleLikeLand}
+              onEdit={() => handleEditListing(land)}
+              onRemove={() => handleRemoveListing(land)}
+              onViewDetails={() => handleViewDetails(land)}
               getImageUrl={getImageUrl}
               formatPrice={formatPrice}
               formatArea={formatArea}
@@ -350,10 +480,11 @@ const LandMarketplace: React.FC = () => {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <ChatSystem 
-                recipientId={selectedLand.currentOwner?._id}
+              <RealtimeChat 
+                landId={selectedLand._id}
+                recipientId={selectedLand.currentOwner?.id}
                 recipientName={selectedLand.currentOwner?.fullName}
-                landContext={selectedLand}
+                onClose={() => setShowChat(false)}
               />
             </div>
           </div>
@@ -366,8 +497,13 @@ const LandMarketplace: React.FC = () => {
 // Land Card Component
 interface LandCardProps {
   land: Land;
+  activeTab: 'browse' | 'my-ads' | 'liked';
   onChat: () => void;
   onBuy: () => void;
+  onLike: (land: Land) => void;
+  onEdit: (land: Land) => void;
+  onRemove: (land: Land) => void;
+  onViewDetails: (land: Land) => void;
   getImageUrl: (hash: string) => string;
   formatPrice: (price: number) => string;
   formatArea: (land: Land) => string;
@@ -375,8 +511,13 @@ interface LandCardProps {
 
 const LandCard: React.FC<LandCardProps> = ({ 
   land, 
+  activeTab,
   onChat, 
   onBuy, 
+  onLike,
+  onEdit,
+  onRemove,
+  onViewDetails,
   getImageUrl, 
   formatPrice, 
   formatArea 
@@ -391,7 +532,10 @@ const LandCard: React.FC<LandCardProps> = ({
   const amenities = land.marketInfo?.nearbyAmenities || [];
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow duration-200 overflow-hidden">
+    <div 
+      className="bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow duration-200 overflow-hidden cursor-pointer"
+      onClick={() => onViewDetails(land)}
+    >
       {/* Image */}
       <div className="relative h-48 bg-gray-200">
         {!imageError && primaryImage ? (
@@ -407,15 +551,21 @@ const LandCard: React.FC<LandCardProps> = ({
           </div>
         )}
         
-        {/* Favorite Button */}
-        <button
-          onClick={() => setIsFavorited(!isFavorited)}
-          className="absolute top-3 right-3 p-2 bg-white bg-opacity-80 rounded-full hover:bg-opacity-100 transition-all"
-        >
-          <Heart 
-            className={`w-5 h-5 ${isFavorited ? 'text-red-500 fill-red-500' : 'text-gray-600'}`} 
-          />
-        </button>
+        {/* Favorite Button - only show in browse tab */}
+        {activeTab === 'browse' && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onLike(land);
+              setIsFavorited(!isFavorited);
+            }}
+            className="absolute top-3 right-3 p-2 bg-white bg-opacity-80 rounded-full hover:bg-opacity-100 transition-all"
+          >
+            <Heart 
+              className={`w-5 h-5 ${isFavorited ? 'text-red-500 fill-red-500' : 'text-gray-600'}`} 
+            />
+          </button>
+        )}
 
         {/* Price Badge */}
         {land.marketInfo?.askingPrice && (
@@ -492,20 +642,55 @@ const LandCard: React.FC<LandCardProps> = ({
 
         {/* Action Buttons */}
         <div className="flex gap-2 mt-4">
-          <button
-            onClick={onChat}
-            className="flex-1 flex items-center justify-center gap-2 py-2 px-4 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
-          >
-            <MessageCircle className="w-4 h-4" />
-            Chat
-          </button>
-          <button
-            onClick={onBuy}
-            className="flex-1 flex items-center justify-center gap-2 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <ShoppingCart className="w-4 h-4" />
-            Buy Now
-          </button>
+          {activeTab === 'my-ads' ? (
+            // Owner actions
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(land);
+                }}
+                className="flex-1 flex items-center justify-center gap-2 py-2 px-4 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+              >
+                <Edit2 className="w-4 h-4" />
+                Edit
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(land);
+                }}
+                className="flex-1 flex items-center justify-center gap-2 py-2 px-4 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                Remove
+              </button>
+            </>
+          ) : (
+            // Buyer actions
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChat();
+                }}
+                className="flex-1 flex items-center justify-center gap-2 py-2 px-4 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Chat
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onBuy();
+                }}
+                className="flex-1 flex items-center justify-center gap-2 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <ShoppingCart className="w-4 h-4" />
+                Buy Now
+              </button>
+            </>
+          )}
         </div>
 
         {/* Additional Info */}
