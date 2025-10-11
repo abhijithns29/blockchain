@@ -20,6 +20,7 @@ import UserProfile from "./UserProfile";
 import UserVerification from "./UserVerification";
 import LandDatabase from "./LandDatabase";
 import Marketplace from "./Marketplace";
+import LandMarketplace from "./LandMarketplace";
 import ChatSystem from "./ChatSystem";
 import QRScanner from "./QRScanner";
 import TwoFactorAuth from "./TwoFactorAuth";
@@ -70,7 +71,7 @@ const Dashboard: React.FC = () => {
           </div>
         );
       case "marketplace":
-        return <Marketplace />;
+        return <LandMarketplace />;
       case "chats":
         return <ChatSystem />;
       case "transactions":

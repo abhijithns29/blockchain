@@ -1,535 +1,522 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, MapPin, MessageCircle, Eye, Heart } from 'lucide-react';
+import { Search, Filter, MapPin, MessageCircle, Eye, Heart, ShoppingCart, Camera, Star, X } from 'lucide-react';
 import { Land } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import apiService from '../services/api';
+import ChatSystem from './ChatSystem';
+
+interface MarketplaceFilters {
+  minPrice: string;
+  maxPrice: string;
+  district: string;
+  state: string;
+  landType: string;
+  minArea: string;
+  maxArea: string;
+}
 
 const LandMarketplace: React.FC = () => {
   const { auth } = useAuth();
   const [lands, setLands] = useState<Land[]>([]);
   const [filteredLands, setFilteredLands] = useState<Land[]>([]);
-  const [myLands, setMyLands] = useState<Land[]>([]);
-  const [activeTab, setActiveTab] = useState<'browse' | 'my-lands'>('browse');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filters, setFilters] = useState({
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedLand, setSelectedLand] = useState<Land | null>(null);
+  const [showChat, setShowChat] = useState(false);
+  const [filters, setFilters] = useState<MarketplaceFilters>({
     minPrice: '',
     maxPrice: '',
     district: '',
     state: '',
-    landType: ''
+    landType: '',
+    minArea: '',
+    maxArea: ''
   });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [selectedLand, setSelectedLand] = useState<Land | null>(null);
-  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    if (activeTab === 'browse') {
-      loadLandsForSale();
-    } else {
-      loadMyLands();
-    }
-  }, [activeTab]);
+    loadMarketplaceLands();
+  }, []);
 
   useEffect(() => {
     filterLands();
   }, [lands, searchTerm, filters]);
 
-  const loadLandsForSale = async () => {
+  const loadMarketplaceLands = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getLandsForSale({ limit: 100 });
-      setLands(response.lands);
+      const response = await apiService.getMarketplaceLands({ limit: 100 });
+      setLands(response.lands || []);
     } catch (error: any) {
-      setError(error.message || 'Failed to load lands for sale');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadMyLands = async () => {
-    try {
-      setLoading(true);
-      const response = await apiService.getMyLands();
-      setMyLands(response.lands);
-    } catch (error: any) {
-      setError(error.message || 'Failed to load your lands');
+      setError(error.message || 'Failed to load marketplace lands');
     } finally {
       setLoading(false);
     }
   };
 
   const filterLands = () => {
-    const dataToFilter = activeTab === 'browse' ? lands : myLands;
-    let filtered = [...dataToFilter];
+    let filtered = lands.filter(land => {
+      // Search term filter
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const matchesSearch = 
+          land.village?.toLowerCase().includes(searchLower) ||
+          land.district?.toLowerCase().includes(searchLower) ||
+          land.state?.toLowerCase().includes(searchLower) ||
+          land.surveyNumber?.toLowerCase().includes(searchLower) ||
+          land.marketInfo?.description?.toLowerCase().includes(searchLower);
+        if (!matchesSearch) return false;
+      }
 
-    if (searchTerm) {
-      filtered = filtered.filter(land =>
-        land.assetId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        land.village.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        land.district.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
+      // Price filters
+      if (filters.minPrice && land.marketInfo?.askingPrice) {
+        if (land.marketInfo.askingPrice < parseFloat(filters.minPrice)) return false;
+      }
+      if (filters.maxPrice && land.marketInfo?.askingPrice) {
+        if (land.marketInfo.askingPrice > parseFloat(filters.maxPrice)) return false;
+      }
 
-    if (filters.minPrice) {
-      filtered = filtered.filter(land => 
-        (land.marketInfo.askingPrice || 0) >= parseFloat(filters.minPrice)
-      );
-    }
+      // Location filters
+      if (filters.district && land.district) {
+        if (!land.district.toLowerCase().includes(filters.district.toLowerCase())) return false;
+      }
+      if (filters.state && land.state) {
+        if (!land.state.toLowerCase().includes(filters.state.toLowerCase())) return false;
+      }
 
-    if (filters.maxPrice) {
-      filtered = filtered.filter(land => 
-        (land.marketInfo.askingPrice || 0) <= parseFloat(filters.maxPrice)
-      );
-    }
+      // Land type filter
+      if (filters.landType && land.landType !== filters.landType) return false;
 
-    if (filters.district) {
-      filtered = filtered.filter(land => 
-        land.district.toLowerCase().includes(filters.district.toLowerCase())
-      );
-    }
+      // Area filters
+      if (filters.minArea && land.area?.acres) {
+        if (land.area.acres < parseFloat(filters.minArea)) return false;
+      }
+      if (filters.maxArea && land.area?.acres) {
+        if (land.area.acres > parseFloat(filters.maxArea)) return false;
+      }
 
-    if (filters.state) {
-      filtered = filtered.filter(land => 
-        land.state.toLowerCase().includes(filters.state.toLowerCase())
-      );
-    }
-
-    if (filters.landType) {
-      filtered = filtered.filter(land => land.landType === filters.landType);
-    }
+      return true;
+    });
 
     setFilteredLands(filtered);
   };
 
-  const handleFilterChange = (key: string, value: string) => {
+  const handleFilterChange = (key: keyof MarketplaceFilters, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
-  const handlePurchaseLand = async (landId: string) => {
-    const offerPrice = prompt('Enter your offer price (₹):');
-    if (offerPrice && !isNaN(parseFloat(offerPrice))) {
-      try {
-        await apiService.purchaseLand(landId, parseFloat(offerPrice));
-        alert('Purchase request submitted successfully! Admin will review your request.');
-        loadLandsForSale();
-      } catch (error: any) {
-        setError(error.message || 'Failed to submit purchase request');
-      }
-    }
-  };
-
-  const handleViewDetails = async (landId: string) => {
-    try {
-      const response = await apiService.getLandById(landId);
-      setSelectedLand(response);
-      setShowModal(true);
-    } catch (error: any) {
-      setError(error.message || 'Failed to load land details');
-    }
-  };
-
-  const handleDownloadOriginalDocument = async (landId: string, assetId: string) => {
-    try {
-      // Check document status first
-      const status = await apiService.checkDocumentStatus(landId);
-      
-      if (!status.data.originalDocument || !status.data.originalDocument.exists) {
-        setError("Original document not found or not available for download");
-        return;
-      }
-
-      const blob = await apiService.downloadOriginalDocument(landId);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `land-document-${assetId}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (error: any) {
-      setError(error.message || "Failed to download original document");
-    }
-  };
-
-  const handleDownloadCertificate = async (landId: string, assetId: string) => {
-    try {
-      // Check document status first
-      const status = await apiService.checkDocumentStatus(landId);
-      
-      if (!status.data.digitalDocument || !status.data.digitalDocument.exists || !status.data.digitalDocument.isDigitalized) {
-        setError("Digital certificate not found or land is not digitalized");
-        return;
-      }
-
-      const blob = await apiService.downloadCertificate(landId);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `land-certificate-${assetId}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (error: any) {
-      setError(error.message || "Failed to download certificate");
-    }
-  };
-
-  const handleStartChat = async (landId: string) => {
-    try {
-      const response = await apiService.startChat(landId);
-      // Navigate to chat or show success message
-      console.log('Chat started:', response.chat.id);
-    } catch (error: any) {
-      setError(error.message || 'Failed to start chat');
-    }
-  };
-
-  const handleListForSale = async (landId: string) => {
-    const askingPrice = prompt('Enter asking price (₹):');
-    const description = prompt('Enter description (optional):');
-    
-    if (askingPrice) {
-      try {
-        await apiService.listLandForSale(landId, {
-          askingPrice: parseFloat(askingPrice),
-          description: description || ''
-        });
-        loadMyLands();
-      } catch (error: any) {
-        setError(error.message || 'Failed to list land for sale');
-      }
-    }
+  const clearFilters = () => {
+    setFilters({
+      minPrice: '',
+      maxPrice: '',
+      district: '',
+      state: '',
+      landType: '',
+      minArea: '',
+      maxArea: ''
+    });
+    setSearchTerm('');
   };
 
   const formatPrice = (price: number) => {
-    if (price >= 10000000) {
-      return `₹${(price / 10000000).toFixed(1)} Cr`;
-    } else if (price >= 100000) {
-      return `₹${(price / 100000).toFixed(1)} L`;
-    } else {
-      return `₹${price.toLocaleString()}`;
-    }
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0
+    }).format(price);
   };
 
-  const renderLandCard = (land: Land, showChatButton = true) => (
-    <div
-      key={land._id}
-      className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
-    >
-      <div className="p-6">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">
-              {land.village}, {land.district}
-            </h3>
-            <p className="text-sm text-gray-600">
-              Asset ID: {land.assetId} • Survey: {land.surveyNumber}
-            </p>
-          </div>
-          {land.marketInfo.askingPrice && (
-            <div className="text-right">
-              <p className="text-xl font-bold text-green-600">
-                {formatPrice(land.marketInfo.askingPrice)}
-              </p>
-              <p className="text-sm text-gray-500">
-                ₹{land.marketInfo.pricePerSqft?.toLocaleString()}/sq ft
-              </p>
+  const formatArea = (land: Land) => {
+    const { acres, guntas, sqft } = land.area || {};
+    let areaStr = '';
+    if (acres && acres > 0) areaStr += `${acres} acres`;
+    if (guntas && guntas > 0) areaStr += ` ${guntas} guntas`;
+    if (sqft && sqft > 0) areaStr += ` ${sqft} sqft`;
+    return areaStr || 'Area not specified';
+  };
+
+  const getImageUrl = (imageHash: string) => {
+    if (!imageHash) return '/placeholder-land.svg';
+    return `http://localhost:5000/api/images/${imageHash}`;
+  };
+
+  const handleChatWithSeller = (land: Land) => {
+    setSelectedLand(land);
+    setShowChat(true);
+  };
+
+  const handleBuyNow = (land: Land) => {
+    // Implement buy now functionality
+    console.log('Buy now clicked for land:', land.assetId);
+    // You can redirect to a purchase flow or show a modal
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-96">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-600 mb-4">{error}</p>
+        <button 
+          onClick={loadMarketplaceLands}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-6">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Land Marketplace</h1>
+        <p className="text-gray-600">Discover verified lands for sale across India</p>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* Search */}
+          <div className="flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Search by location, survey number, or description..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
             </div>
-          )}
+          </div>
+
+          {/* Filter Toggle */}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center gap-2 px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            <Filter className="w-5 h-5" />
+            Filters
+          </button>
         </div>
 
-        <div className="space-y-2 mb-4">
-          <div className="flex items-center text-gray-600">
-            <MapPin className="h-4 w-4 mr-2" />
-            <span className="text-sm">
-              {land.taluka}, {land.state} - {land.pincode}
-            </span>
+        {/* Advanced Filters */}
+        {showFilters && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Min Price (₹)</label>
+                <input
+                  type="number"
+                  value={filters.minPrice}
+                  onChange={(e) => handleFilterChange('minPrice', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Max Price (₹)</label>
+                <input
+                  type="number"
+                  value={filters.maxPrice}
+                  onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="No limit"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">District</label>
+                <input
+                  type="text"
+                  value={filters.district}
+                  onChange={(e) => handleFilterChange('district', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Any district"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                <input
+                  type="text"
+                  value={filters.state}
+                  onChange={(e) => handleFilterChange('state', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Any state"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Land Type</label>
+                <select
+                  value={filters.landType}
+                  onChange={(e) => handleFilterChange('landType', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">All Types</option>
+                  <option value="AGRICULTURAL">Agricultural</option>
+                  <option value="RESIDENTIAL">Residential</option>
+                  <option value="COMMERCIAL">Commercial</option>
+                  <option value="INDUSTRIAL">Industrial</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Min Area (acres)</label>
+                <input
+                  type="number"
+                  value={filters.minArea}
+                  onChange={(e) => handleFilterChange('minArea', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="0"
+                  step="0.1"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Max Area (acres)</label>
+                <input
+                  type="number"
+                  value={filters.maxArea}
+                  onChange={(e) => handleFilterChange('maxArea', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="No limit"
+                  step="0.1"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={clearFilters}
+                  className="w-full px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Clear All
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="flex justify-between text-sm text-gray-600">
-            <span>Type: {land.landType}</span>
-            <span>Area: {land.area.acres || 0} Acres</span>
+        )}
+      </div>
+
+      {/* Results Count */}
+      <div className="mb-4">
+        <p className="text-gray-600">
+          Showing {filteredLands.length} of {lands.length} lands for sale
+        </p>
+      </div>
+
+      {/* Land Cards Grid */}
+      {filteredLands.length === 0 ? (
+        <div className="text-center py-12">
+          <div className="text-gray-400 mb-4">
+            <MapPin className="w-16 h-16 mx-auto" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No lands found</h3>
+          <p className="text-gray-600">Try adjusting your search criteria or filters</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredLands.map((land) => (
+            <LandCard
+              key={land._id}
+              land={land}
+              onChat={() => handleChatWithSeller(land)}
+              onBuy={() => handleBuyNow(land)}
+              getImageUrl={getImageUrl}
+              formatPrice={formatPrice}
+              formatArea={formatArea}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Chat Modal */}
+      {showChat && selectedLand && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-4xl h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold">
+                Chat with {selectedLand.currentOwner?.fullName || 'Seller'}
+              </h3>
+              <button
+                onClick={() => setShowChat(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <ChatSystem 
+                recipientId={selectedLand.currentOwner?._id}
+                recipientName={selectedLand.currentOwner?.fullName}
+                landContext={selectedLand}
+              />
+            </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+};
 
-        {land.marketInfo.description && (
-          <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+// Land Card Component
+interface LandCardProps {
+  land: Land;
+  onChat: () => void;
+  onBuy: () => void;
+  getImageUrl: (hash: string) => string;
+  formatPrice: (price: number) => string;
+  formatArea: (land: Land) => string;
+}
+
+const LandCard: React.FC<LandCardProps> = ({ 
+  land, 
+  onChat, 
+  onBuy, 
+  getImageUrl, 
+  formatPrice, 
+  formatArea 
+}) => {
+  const [imageError, setImageError] = useState(false);
+  const [isFavorited, setIsFavorited] = useState(false);
+
+  const primaryImage = land.marketInfo?.images?.[0];
+  const imageUrl = primaryImage ? getImageUrl(primaryImage) : '/placeholder-land.svg';
+
+  const features = land.marketInfo?.features || [];
+  const amenities = land.marketInfo?.nearbyAmenities || [];
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow duration-200 overflow-hidden">
+      {/* Image */}
+      <div className="relative h-48 bg-gray-200">
+        {!imageError && primaryImage ? (
+          <img
+            src={imageUrl}
+            alt={`${land.village}, ${land.district}`}
+            className="w-full h-full object-cover"
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gray-100">
+            <Camera className="w-12 h-12 text-gray-400" />
+          </div>
+        )}
+        
+        {/* Favorite Button */}
+        <button
+          onClick={() => setIsFavorited(!isFavorited)}
+          className="absolute top-3 right-3 p-2 bg-white bg-opacity-80 rounded-full hover:bg-opacity-100 transition-all"
+        >
+          <Heart 
+            className={`w-5 h-5 ${isFavorited ? 'text-red-500 fill-red-500' : 'text-gray-600'}`} 
+          />
+        </button>
+
+        {/* Price Badge */}
+        {land.marketInfo?.askingPrice && (
+          <div className="absolute bottom-3 left-3 bg-green-600 text-white px-3 py-1 rounded-full text-sm font-semibold">
+            {formatPrice(land.marketInfo.askingPrice)}
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="p-4">
+        {/* Location */}
+        <div className="flex items-center gap-1 text-gray-600 mb-2">
+          <MapPin className="w-4 h-4" />
+          <span className="text-sm">
+            {land.village}, {land.district}, {land.state}
+          </span>
+        </div>
+
+        {/* Title */}
+        <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
+          {land.landType} Land - Survey No. {land.surveyNumber}
+        </h3>
+
+        {/* Area */}
+        <p className="text-gray-600 text-sm mb-3">
+          {formatArea(land)}
+        </p>
+
+        {/* Description */}
+        {land.marketInfo?.description && (
+          <p className="text-gray-700 text-sm mb-3 line-clamp-2">
             {land.marketInfo.description}
           </p>
         )}
 
-        {showChatButton && land.currentOwner && (
-          <div className="bg-gray-50 rounded-md p-3 mb-4">
-            <p className="text-sm font-medium text-gray-700">
-              Owner: {land.currentOwner.fullName}
-            </p>
+        {/* Features */}
+        {features.length > 0 && (
+          <div className="mb-3">
+            <ul className="text-xs text-gray-600 space-y-1">
+              {features.slice(0, 3).map((feature, index) => (
+                <li key={index} className="flex items-center gap-1">
+                  <Star className="w-3 h-3 text-yellow-500" />
+                  {feature}
+                </li>
+              ))}
+              {features.length > 3 && (
+                <li className="text-gray-500">+{features.length - 3} more features</li>
+              )}
+            </ul>
           </div>
         )}
 
-        <div className="flex space-x-2">
-          <button
-            onClick={() => handleViewDetails(land._id)}
-            className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-          >
-            <Eye className="h-4 w-4 mr-1" />
-            View Details
-          </button>
-
-          {showChatButton && land.currentOwner && land.currentOwner.id !== auth.user?.id && (
-            <button
-              onClick={() => handlePurchaseLand(land._id)}
-              className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
-            >
-              <ShoppingCart className="h-4 w-4 mr-1" />
-              Purchase Land
-            </button>
-          )}
-
-          {!showChatButton && !land.marketInfo.isForSale && auth.user?.role === "USER" && (
-            <button
-              onClick={() => handleListForSale(land._id)}
-              className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 transition-colors"
-            >
-              List for Sale
-            </button>
-          )}
-        </div>
-
-        {land.marketInfo.listedDate && (
-          <p className="text-xs text-gray-500 mt-2 text-center">
-            Listed on {new Date(land.marketInfo.listedDate).toLocaleDateString()}
-          </p>
+        {/* Amenities */}
+        {amenities.length > 0 && (
+          <div className="mb-3">
+            <div className="flex flex-wrap gap-1">
+              {amenities.slice(0, 3).map((amenity, index) => (
+                <span 
+                  key={index}
+                  className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
+                >
+                  {amenity}
+                </span>
+              ))}
+              {amenities.length > 3 && (
+                <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                  +{amenities.length - 3}
+                </span>
+              )}
+            </div>
+          </div>
         )}
-      </div>
-    </div>
-  );
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Land Marketplace</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Buy and sell land properties with verified ownership
-          </p>
-        </div>
-        
-        <div className="flex space-x-2">
+        {/* Action Buttons */}
+        <div className="flex gap-2 mt-4">
           <button
-            onClick={() => setActiveTab('browse')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'browse'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
+            onClick={onChat}
+            className="flex-1 flex items-center justify-center gap-2 py-2 px-4 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
           >
-            Browse Lands
+            <MessageCircle className="w-4 h-4" />
+            Chat
           </button>
           <button
-            onClick={() => setActiveTab('my-lands')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'my-lands'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
+            onClick={onBuy}
+            className="flex-1 flex items-center justify-center gap-2 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
-            My Lands
+            <ShoppingCart className="w-4 h-4" />
+            Buy Now
           </button>
         </div>
-      </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md">
-          {error}
-        </div>
-      )}
-
-      {/* Search and Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-          <div className="lg:col-span-2">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                type="text"
-                placeholder="Search by Asset ID, Village, District..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-          </div>
-
-          {activeTab === 'browse' && (
-            <>
-              <input
-                type="number"
-                placeholder="Min Price (₹)"
-                value={filters.minPrice}
-                onChange={(e) => handleFilterChange('minPrice', e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-
-              <input
-                type="number"
-                placeholder="Max Price (₹)"
-                value={filters.maxPrice}
-                onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </>
-          )}
-
-          <select
-            value={filters.landType}
-            onChange={(e) => handleFilterChange('landType', e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">All Types</option>
-            <option value="AGRICULTURAL">Agricultural</option>
-            <option value="RESIDENTIAL">Residential</option>
-            <option value="COMMERCIAL">Commercial</option>
-            <option value="INDUSTRIAL">Industrial</option>
-          </select>
-
-          <input
-            type="text"
-            placeholder="District"
-            value={filters.district}
-            onChange={(e) => handleFilterChange('district', e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
+        {/* Additional Info */}
+        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+          <span>Listed {new Date(land.marketInfo?.listedDate || land.createdAt).toLocaleDateString()}</span>
+          <span className="flex items-center gap-1">
+            <Eye className="w-3 h-3" />
+            Verified
+          </span>
         </div>
       </div>
-
-      {/* Lands Grid */}
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        </div>
-      ) : filteredLands.length === 0 ? (
-        <div className="text-center py-12">
-          <div className="text-gray-400 text-lg">
-            {activeTab === 'browse' ? 'No lands for sale found' : 'You don\'t own any lands yet'}
-          </div>
-          <p className="text-gray-500 mt-2">
-            {activeTab === 'browse'
-              ? 'Try adjusting your search or filter criteria.'
-              : 'Claim ownership of lands from the Land Database to see them here.'}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredLands.map((land) => renderLandCard(land, activeTab === 'browse'))}
-        </div>
-      )}
-
-      {/* Land Details Modal */}
-      {showModal && selectedLand && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-3/4 lg:w-1/2 max-h-[80vh] overflow-y-auto p-6 relative">
-            <button
-              onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-            >
-              ×
-            </button>
-
-            <h2 className="text-xl font-bold mb-4">
-              Land Details: {selectedLand.assetId}
-            </h2>
-
-            <div className="space-y-2">
-              <p>
-                <strong>Survey Number:</strong> {selectedLand.surveyNumber}
-              </p>
-              <p>
-                <strong>Village:</strong> {selectedLand.village}
-              </p>
-              <p>
-                <strong>Taluka:</strong> {selectedLand.taluka}
-              </p>
-              <p>
-                <strong>District:</strong> {selectedLand.district}
-              </p>
-              <p>
-                <strong>State:</strong> {selectedLand.state}
-              </p>
-              <p>
-                <strong>Land Type:</strong> {selectedLand.landType}
-              </p>
-              <p>
-                <strong>Area:</strong> {selectedLand.area.acres || 0} Acres
-              </p>
-              <p>
-                <strong>Status:</strong> {selectedLand.status}
-              </p>
-              <p>
-                <strong>Verification Status:</strong>{" "}
-                {selectedLand.verificationStatus}
-              </p>
-
-              {selectedLand.currentOwner ? (
-                <>
-                  <p>
-                    <strong>Owner:</strong> {selectedLand.currentOwner.fullName}
-                  </p>
-                  <p>
-                    <strong>Email:</strong> {selectedLand.currentOwner.email}
-                  </p>
-                </>
-              ) : (
-                <p>No current owner assigned</p>
-              )}
-
-              {selectedLand.marketInfo.isForSale && (
-                <p>
-                  <strong>Asking Price:</strong> ₹
-                  {selectedLand.marketInfo.askingPrice?.toLocaleString()}
-                </p>
-              )}
-
-              {/* Document Section - Two Clear Buttons */}
-              <div className="mt-4 p-4 border rounded bg-gray-50">
-                <h3 className="text-lg font-bold mb-3">📄 Land Documents</h3>
-                
-                <div className="space-y-3">
-                  {selectedLand.originalDocument?.url && (
-                    <button 
-                      onClick={() => handleDownloadOriginalDocument(selectedLand._id || selectedLand.id, selectedLand.assetId)}
-                      className="w-full inline-flex items-center justify-center px-4 py-3 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-                    >
-                      📄 Download Original Land Document
-                      <span className="ml-2 text-xs text-gray-500">
-                        ({selectedLand.originalDocument.filename})
-                      </span>
-                    </button>
-                  )}
-
-                  {selectedLand.digitalDocument?.url && selectedLand.digitalDocument.isDigitalized && (
-                    <button 
-                      onClick={() => handleDownloadCertificate(selectedLand._id || selectedLand.id, selectedLand.assetId)}
-                      className="w-full inline-flex items-center justify-center px-4 py-3 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
-                    >
-                      🔒 Download Digitalized Certificate
-                    </button>
-                  )}
-                  
-                  {!selectedLand.originalDocument?.url && !selectedLand.digitalDocument?.url && (
-                    <p className="text-gray-500 text-center py-4">
-                      No documents available for this land.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

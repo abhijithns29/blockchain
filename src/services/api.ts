@@ -288,28 +288,7 @@ class ApiService {
     });
   }
 
-  async listLandForSale(landId: string, saleData: any, images?: File[]) {
-    const formData = new FormData();
-    
-    // Add text fields
-    formData.append('askingPrice', saleData.askingPrice.toString());
-    if (saleData.description) {
-      formData.append('description', saleData.description);
-    }
-    if (saleData.features) {
-      formData.append('features', JSON.stringify(saleData.features));
-    }
-    if (saleData.nearbyAmenities) {
-      formData.append('nearbyAmenities', JSON.stringify(saleData.nearbyAmenities));
-    }
-    
-    // Add image files
-    if (images && images.length > 0) {
-      images.forEach((image, index) => {
-        formData.append('images', image);
-      });
-    }
-    
+  async listLandForSale(landId: string, formData: FormData) {
     return this.request(`/lands/${landId}/list-for-sale`, {
       method: 'POST',
       body: formData,

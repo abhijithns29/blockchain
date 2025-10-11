@@ -21,6 +21,7 @@ import {
 import { useAuth } from "../hooks/useAuth";
 import QRCode from "qrcode";
 import apiService from "../services/api";
+import LandListingForm from "./LandListingForm";
 
 const UserProfile: React.FC = () => {
   const { auth } = useAuth();
@@ -32,16 +33,9 @@ const UserProfile: React.FC = () => {
   const [ownedLands, setOwnedLands] = useState<any[]>([]);
   const [landsLoading, setLandsLoading] = useState(false);
   const [showOwnedLands, setShowOwnedLands] = useState(false);
-  const [showSaleModal, setShowSaleModal] = useState(false);
+  const [showListingForm, setShowListingForm] = useState(false);
   const [showPartitionModal, setShowPartitionModal] = useState(false);
   const [selectedLand, setSelectedLand] = useState<any>(null);
-  const [saleData, setSaleData] = useState({
-    askingPrice: "",
-    description: "",
-    features: "",
-    nearbyAmenities: "",
-  });
-  const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [partitionData, setPartitionData] = useState({
     partitionType: "partial", // 'partial' or 'whole'
     partitionArea: "",
@@ -128,28 +122,15 @@ const UserProfile: React.FC = () => {
 
   const handleListForSale = (land: any) => {
     setSelectedLand(land);
-    setSaleData({
-      askingPrice: "",
-      description: "",
-      features: "",
-      nearbyAmenities: "",
-    });
-    setSelectedImages([]);
-    setShowSaleModal(true);
+    setShowListingForm(true);
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length + selectedImages.length > 7) {
-      setError("Maximum 7 images allowed");
-      return;
-    }
-    setSelectedImages([...selectedImages, ...files]);
+  const handleListingSuccess = () => {
+    setShowListingForm(false);
+    setSelectedLand(null);
+    fetchOwnedLands(); // Refresh the owned lands list
   };
 
-  const removeImage = (index: number) => {
-    setSelectedImages(selectedImages.filter((_, i) => i !== index));
-  };
 
   const handlePartitionLand = (land: any) => {
     setSelectedLand(land);
@@ -162,29 +143,6 @@ const UserProfile: React.FC = () => {
     setShowPartitionModal(true);
   };
 
-  const handleSaleSubmit = async () => {
-    if (!selectedLand || !saleData.askingPrice) return;
-
-    try {
-      setLoading(true);
-      const response = await apiService.listLandForSale(
-        selectedLand._id,
-        saleData,
-        selectedImages
-      );
-      console.log("Land listed for sale:", response);
-
-      // Refresh the owned lands
-      await fetchOwnedLands();
-      setShowSaleModal(false);
-      setError("");
-    } catch (error) {
-      console.error("Error listing land for sale:", error);
-      setError("Failed to list land for sale");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handlePartitionSubmit = async () => {
     if (!selectedLand || !partitionData.askingPrice) return;
@@ -743,138 +701,13 @@ const UserProfile: React.FC = () => {
         </div>
       </div>
 
-      {/* Sale Modal */}
-      {showSaleModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">List Land for Sale</h3>
-              <button
-                onClick={() => setShowSaleModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Asking Price (₹)
-                </label>
-                <input
-                  type="number"
-                  value={saleData.askingPrice}
-                  onChange={(e) =>
-                    setSaleData({ ...saleData, askingPrice: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter asking price"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={saleData.description}
-                  onChange={(e) =>
-                    setSaleData({ ...saleData, description: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows={3}
-                  placeholder="Describe the land..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Features
-                </label>
-                <input
-                  type="text"
-                  value={saleData.features}
-                  onChange={(e) =>
-                    setSaleData({ ...saleData, features: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Road access, Electricity, Water"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nearby Amenities
-                </label>
-                <input
-                  type="text"
-                  value={saleData.nearbyAmenities}
-                  onChange={(e) =>
-                    setSaleData({
-                      ...saleData,
-                      nearbyAmenities: e.target.value,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Schools, Hospitals, Markets"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Land Images (1-7 photos)
-                </label>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handleImageSelect}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                {selectedImages.length > 0 && (
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    {selectedImages.map((image, index) => (
-                      <div key={index} className="relative">
-                        <img
-                          src={URL.createObjectURL(image)}
-                          alt={`Preview ${index + 1}`}
-                          className="w-full h-20 object-cover rounded-md"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeImage(index)}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <p className="text-xs text-gray-500 mt-1">
-                  {selectedImages.length}/7 images selected
-                </p>
-              </div>
-            </div>
-
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={() => setShowSaleModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaleSubmit}
-                disabled={loading || !saleData.askingPrice}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-              >
-                {loading ? "Listing..." : "List for Sale"}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Listing Form Modal */}
+      {showListingForm && selectedLand && (
+        <LandListingForm
+          land={selectedLand}
+          onClose={() => setShowListingForm(false)}
+          onSuccess={handleListingSuccess}
+        />
       )}
 
       {/* Partition Modal */}

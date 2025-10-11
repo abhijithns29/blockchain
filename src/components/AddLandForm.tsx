@@ -219,7 +219,28 @@ const AddLandForm: React.FC<AddLandFormProps> = ({ onClose, onSuccess }) => {
         setError(response.message || 'Failed to add land');
       }
     } catch (error: any) {
-      setError(error.message || 'Failed to add land');
+      console.error('Add land error:', error);
+      
+      // Provide more specific error messages based on the error
+      let errorMessage = 'Failed to add land';
+      
+      if (error.message.includes('IPFS')) {
+        errorMessage = 'Failed to upload document to IPFS. Please check your internet connection and try again.';
+      } else if (error.message.includes('watermark')) {
+        errorMessage = 'Failed to process document watermark. Please ensure the file is a valid PDF or image.';
+      } else if (error.message.includes('file format')) {
+        errorMessage = 'Unsupported file format. Please upload a PDF, JPEG, or PNG file.';
+      } else if (error.message.includes('Missing required fields')) {
+        errorMessage = 'Please fill in all required fields before submitting.';
+      } else if (error.message.includes('Invalid ownerId')) {
+        errorMessage = 'Invalid owner selected. Please select a valid user as the owner.';
+      } else if (error.message.includes('Failed to upload document')) {
+        errorMessage = 'Document upload failed. Please try again with a different file or check your connection.';
+      } else {
+        errorMessage = error.message || 'An unexpected error occurred. Please try again.';
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
