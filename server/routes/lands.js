@@ -835,6 +835,190 @@ router.post(
   }
 );
 
+// Update land listing (Owner only)
+router.put(
+  "/:landId/update-listing",
+  auth,
+  upload.array("images", 7), // Allow up to 7 images as per frontend
+  async (req, res) => {
+    try {
+      console.log("📝 Update listing request received:", {
+        landId: req.params.landId,
+        body: req.body,
+        files: req.files ? req.files.length : 0,
+      });
+
+      const { askingPrice, description, features, nearbyAmenities, existingImages } = req.body;
+
+      if (!askingPrice || askingPrice <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid asking price is required",
+        });
+      }
+
+      const land = await Land.findById(req.params.landId);
+      if (!land) {
+        return res.status(404).json({
+          success: false,
+          message: "Land not found",
+        });
+      }
+
+      if (
+        !land.currentOwner ||
+        land.currentOwner.toString() !== req.user._id.toString()
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Only the owner can update this land listing",
+        });
+      }
+
+      if (!land.marketInfo || !land.marketInfo.isForSale) {
+        return res.status(400).json({
+          success: false,
+          message: "Land is not currently listed for sale",
+        });
+      }
+
+      // Parse features and amenities if they're JSON strings
+      let parsedFeatures = [];
+      let parsedAmenities = [];
+
+      try {
+        if (features) {
+          parsedFeatures =
+            typeof features === "string" ? JSON.parse(features) : features;
+        }
+        if (nearbyAmenities) {
+          parsedAmenities =
+            typeof nearbyAmenities === "string"
+              ? JSON.parse(nearbyAmenities)
+              : nearbyAmenities;
+        }
+      } catch (parseError) {
+        console.log(
+          "⚠️ Could not parse features/amenities as JSON, using as strings"
+        );
+        parsedFeatures = features ? [features] : [];
+        parsedAmenities = nearbyAmenities ? [nearbyAmenities] : [];
+      }
+
+      // Handle existing images - parse which ones to keep
+      let imageFilenames = [];
+      
+      try {
+        if (existingImages) {
+          const imagesToKeep = typeof existingImages === "string" 
+            ? JSON.parse(existingImages) 
+            : existingImages;
+          imageFilenames = Array.isArray(imagesToKeep) ? imagesToKeep : [];
+        }
+      } catch (parseError) {
+        console.log("⚠️ Could not parse existingImages, starting with empty array");
+        imageFilenames = [];
+      }
+
+      // Handle new image uploads to GridFS
+      if (req.files && req.files.length > 0) {
+        console.log(
+          `📸 Processing ${req.files.length} new images for land ${land.assetId}`
+        );
+        for (const file of req.files) {
+          try {
+            // Upload to GridFS
+            const gridfsFilename = await uploadToGridFS(
+              file.path,
+              file.filename
+            );
+            imageFilenames.push(gridfsFilename);
+
+            // Clean up temporary file
+            if (fs.existsSync(file.path)) {
+              fs.unlinkSync(file.path);
+            }
+          } catch (uploadError) {
+            console.error(
+              `❌ Failed to upload image ${file.originalname}:`,
+              uploadError
+            );
+            // Clean up temporary file on error
+            if (fs.existsSync(file.path)) {
+              fs.unlinkSync(file.path);
+            }
+          }
+        }
+      }
+
+      console.log(
+        `📸 Final image count for land ${land.assetId}: ${imageFilenames.length} (kept ${imageFilenames.length - (req.files ? req.files.length : 0)} existing, added ${req.files ? req.files.length : 0} new)`
+      );
+
+      // Calculate price per sqft
+      const totalAreaSqft = land.getTotalAreaSqft ? land.getTotalAreaSqft() : 0;
+      let pricePerSqft = 0;
+      if (totalAreaSqft > 0) {
+        pricePerSqft = parseFloat(askingPrice) / totalAreaSqft;
+      }
+
+      // Update market info
+      land.marketInfo = {
+        ...land.marketInfo,
+        askingPrice: parseFloat(askingPrice),
+        pricePerSqft,
+        updatedDate: new Date(),
+        description: description || "",
+        features: parsedFeatures,
+        nearbyAmenities: parsedAmenities,
+        images: imageFilenames,
+      };
+
+      await land.save();
+
+      // Log audit trail
+      await AuditLog.logAction(
+        "LAND_UPDATE_LISTING",
+        req.user._id,
+        "LAND",
+        land._id.toString(),
+        {
+          assetId: land.assetId,
+          askingPrice: parseFloat(askingPrice),
+          imageCount: imageFilenames.length,
+        },
+        req
+      );
+
+      console.log(
+        `✅ Land ${land.assetId} listing updated with ${imageFilenames.length} images`
+      );
+
+      res.json({
+        success: true,
+        message: "Land listing updated successfully",
+        land,
+      });
+    } catch (error) {
+      console.error("Update listing error:", error);
+
+      // Clean up any uploaded files if there was an error
+      if (req.files && req.files.length > 0) {
+        req.files.forEach((file) => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to update land listing",
+      });
+    }
+  }
+);
+
 // Get user's owned lands
 router.get("/my-lands", auth, async (req, res) => {
   try {

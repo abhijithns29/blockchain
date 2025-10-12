@@ -238,9 +238,14 @@ app.use("*", (req, res) => {
     availableRoutes: [
       "/api/auth",
       "/api/users",
+      "/api/lands",
       "/api/digitized-lands",
       "/api/land-transactions",
       "/api/chats",
+      "/api/buy-requests",
+      "/api/admin/transactions",
+      "/api/2fa",
+      "/api/audit",
       "/api/health",
     ],
   });

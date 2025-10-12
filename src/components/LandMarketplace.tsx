@@ -3,6 +3,8 @@ import { Search, Filter, MapPin, MessageCircle, Eye, Heart, ShoppingCart, Camera
 import { Land } from '../types';
 import apiService from '../services/api';
 import RealtimeChat from './RealtimeChat';
+import EditLandListingForm from './EditLandListingForm';
+import { useAuth } from '../hooks/useAuth';
 
 interface MarketplaceFilters {
   minPrice: string;
@@ -29,6 +31,8 @@ const LandMarketplace: React.FC<LandMarketplaceProps> = ({ onNavigateToLand }) =
   const [showFilters, setShowFilters] = useState(false);
   const [selectedLand, setSelectedLand] = useState<Land | null>(null);
   const [showChat, setShowChat] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [selectedLandForEdit, setSelectedLandForEdit] = useState<Land | null>(null);
   const [activeTab, setActiveTab] = useState<'browse' | 'my-ads' | 'liked'>('browse');
   const [filters, setFilters] = useState<MarketplaceFilters>({
     minPrice: '',
@@ -208,9 +212,8 @@ const LandMarketplace: React.FC<LandMarketplaceProps> = ({ onNavigateToLand }) =
   };
 
   const handleEditListing = (land: Land) => {
-    // Implement edit listing functionality
-    console.log('Edit listing clicked for land:', land.assetId);
-    // You can open an edit modal or redirect to edit page
+    setSelectedLandForEdit(land);
+    setShowEditForm(true);
   };
 
   const handleRemoveListing = async (land: Land) => {
@@ -490,6 +493,27 @@ const LandMarketplace: React.FC<LandMarketplaceProps> = ({ onNavigateToLand }) =
           </div>
         </div>
       )}
+
+      {/* Edit Listing Modal */}
+      {showEditForm && selectedLandForEdit && (
+        <EditLandListingForm
+          land={selectedLandForEdit}
+          onClose={() => {
+            setShowEditForm(false);
+            setSelectedLandForEdit(null);
+          }}
+          onSuccess={() => {
+            setShowEditForm(false);
+            setSelectedLandForEdit(null);
+            // Refresh the listings
+            if (activeTab === 'my-ads') {
+              loadMyListings();
+            } else {
+              loadMarketplaceLands();
+            }
+          }}
+        />
+      )}
     </div>
   );
 };
@@ -522,6 +546,7 @@ const LandCard: React.FC<LandCardProps> = ({
   formatPrice, 
   formatArea 
 }) => {
+  const { auth } = useAuth();
   const [imageError, setImageError] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
 
@@ -530,6 +555,9 @@ const LandCard: React.FC<LandCardProps> = ({
 
   const features = land.marketInfo?.features || [];
   const amenities = land.marketInfo?.nearbyAmenities || [];
+  
+  // Check if current user is the owner
+  const isOwner = auth.user?.id === land?.currentOwner?.id || auth.user?.id === land?.currentOwner?._id;
 
   return (
     <div 
@@ -642,7 +670,7 @@ const LandCard: React.FC<LandCardProps> = ({
 
         {/* Action Buttons */}
         <div className="flex gap-2 mt-4">
-          {activeTab === 'my-ads' ? (
+          {activeTab === 'my-ads' || isOwner ? (
             // Owner actions
             <>
               <button
@@ -667,7 +695,7 @@ const LandCard: React.FC<LandCardProps> = ({
               </button>
             </>
           ) : (
-            // Buyer actions
+            // Buyer actions - only show if user is not the owner
             <>
               <button
                 onClick={(e) => {

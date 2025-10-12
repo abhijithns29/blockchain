@@ -146,8 +146,15 @@ router.post('/:transactionId/approve', auth, requireAdmin, async (req, res) => {
 
       // Update current owner
       land.currentOwner = buyRequest.buyer._id;
-      land.status = 'SOLD';
+      land.status = 'AVAILABLE'; // Set to AVAILABLE so new owner can list it for sale
+      land.verificationStatus = 'VERIFIED'; // Mark as verified for new owner
       land.marketInfo.isForSale = false;
+
+      // Ensure digital document is marked as digitalized
+      if (!land.digitalDocument) {
+        land.digitalDocument = {};
+      }
+      land.digitalDocument.isDigitalized = true;
 
       await land.save();
     }

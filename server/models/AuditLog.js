@@ -13,6 +13,7 @@ const auditLogSchema = new mongoose.Schema({
       'LAND_DIGITALIZE',
       'LAND_CLAIM',
       'LAND_LIST_SALE',
+      'LAND_UPDATE_LISTING',
       'TRANSACTION_INITIATE',
       'TRANSACTION_APPROVE',
       'TRANSACTION_REJECT',

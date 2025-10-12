@@ -302,18 +302,18 @@ class ApiService {
     return this.request(`/users/my-listings${queryString ? `?${queryString}` : ''}`);
   }
 
+  // Update listing
+  async updateLandListing(landId: string, formData: FormData) {
+    return this.request(`/lands/${landId}/update-listing`, {
+      method: 'PUT',
+      body: formData,
+    });
+  }
+
   // Remove listing
   async removeListing(landId: string) {
     return this.request(`/lands/${landId}/remove-listing`, {
       method: 'DELETE',
-    });
-  }
-
-  // Edit listing
-  async editListing(landId: string, data: any) {
-    return this.request(`/lands/${landId}/edit-listing`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
     });
   }
 

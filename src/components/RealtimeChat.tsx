@@ -131,13 +131,27 @@ const RealtimeChat: React.FC<RealtimeChatProps> = ({
         // If message is from current user, replace the temporary message
         if (String(messageSenderId) === String(currentUserId)) {
           setMessages(prev => {
-            // Find and replace the most recent temporary message
-            const filteredMessages = prev.filter(msg => msg && msg._id && !msg._id.startsWith('temp-'));
-            return [...filteredMessages, data.message];
+            // Remove any temporary messages from this user and add the real message
+            const filteredMessages = prev.filter(msg => 
+              msg && msg._id && !(msg._id.startsWith('temp-') && msg.sender === currentUserId)
+            );
+            
+            // Check if this message already exists to prevent duplicates
+            const messageExists = filteredMessages.some(msg => msg._id === data.message._id);
+            if (!messageExists) {
+              return [...filteredMessages, data.message];
+            }
+            return filteredMessages;
           });
         } else {
-          // Add message from other users
-          setMessages(prev => [...prev, data.message]);
+          // Add message from other users - check for duplicates first
+          setMessages(prev => {
+            const messageExists = prev.some(msg => msg._id === data.message._id);
+            if (!messageExists) {
+              return [...prev, data.message];
+            }
+            return prev;
+          });
         }
 
         // Update current offer if this is an offer-related message
@@ -155,7 +169,13 @@ const RealtimeChat: React.FC<RealtimeChatProps> = ({
       } catch (error) {
         console.error('Error handling new message:', error);
         // Fallback: just add the message normally
-        setMessages(prev => [...prev, data.message]);
+        setMessages(prev => {
+          const messageExists = prev.some(msg => msg._id === data.message._id);
+          if (!messageExists) {
+            return [...prev, data.message];
+          }
+          return prev;
+        });
       }
     });
 
@@ -367,8 +387,8 @@ const RealtimeChat: React.FC<RealtimeChatProps> = ({
       }
 
       const responseMessage = action === 'ACCEPT' 
-        ? `Accepted offer of ₹${currentOffer.amount.toLocaleString()}`
-        : `Rejected offer of ₹${currentOffer.amount.toLocaleString()}`;
+        ? `Accepted offer of ₹${currentOffer.amount?.toLocaleString() || '0'}`
+        : `Rejected offer of ₹${currentOffer.amount?.toLocaleString() || '0'}`;
 
       // Add response message optimistically
       const optimisticResponse = {
@@ -453,7 +473,7 @@ const RealtimeChat: React.FC<RealtimeChatProps> = ({
 
       // Add message to chat
       const messageData = {
-        message: `Buy request initiated for ₹${currentOffer.amount.toLocaleString()}`,
+        message: `Buy request initiated for ₹${currentOffer.amount?.toLocaleString() || '0'}`,
         messageType: 'BUY_REQUEST'
       };
       console.log('Sending buy request message:', messageData);
@@ -878,7 +898,7 @@ const RealtimeChat: React.FC<RealtimeChatProps> = ({
         <div className="p-4 border-t bg-yellow-50">
           <div className="text-center mb-3">
             <p className="text-sm text-gray-700">
-              <strong>₹{currentOffer.amount.toLocaleString()}</strong> offer received
+              <strong>₹{currentOffer.amount?.toLocaleString() || '0'}</strong> offer received
             </p>
           </div>
           <div className="flex gap-2 justify-center">

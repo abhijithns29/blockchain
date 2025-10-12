@@ -18,6 +18,7 @@ import { Land } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import apiService from '../services/api';
 import RealtimeChat from './RealtimeChat';
+import EditLandListingForm from './EditLandListingForm';
 
 interface LandDetailPageProps {
   landId: string;
@@ -33,6 +34,7 @@ const LandDetailPage: React.FC<LandDetailPageProps> = ({ landId, onBack, onNavig
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isLiked, setIsLiked] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
 
   useEffect(() => {
     loadLandDetails();
@@ -83,8 +85,7 @@ const LandDetailPage: React.FC<LandDetailPageProps> = ({ landId, onBack, onNavig
   };
 
   const handleEdit = () => {
-    // Navigate to edit page or open edit modal
-    console.log('Edit listing');
+    setShowEditForm(true);
   };
 
   const handleRemove = async () => {
@@ -529,6 +530,19 @@ const LandDetailPage: React.FC<LandDetailPageProps> = ({ landId, onBack, onNavig
             </div>
           </div>
         </div>
+      )}
+
+      {/* Edit Listing Modal */}
+      {showEditForm && land && (
+        <EditLandListingForm
+          land={land}
+          onClose={() => setShowEditForm(false)}
+          onSuccess={() => {
+            setShowEditForm(false);
+            // Refresh land details
+            loadLandDetails();
+          }}
+        />
       )}
     </div>
   );

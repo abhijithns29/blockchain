@@ -23,7 +23,21 @@ router.post('/', auth, async (req, res) => {
 
     // Check if seller has 2FA enabled
     const seller = await User.findById(sellerId);
-    if (!seller || !seller.twoFactorEnabled) {
+    console.log('Seller 2FA check:', {
+      sellerId: sellerId,
+      sellerFound: !!seller,
+      sellerIdMatch: seller ? seller._id.toString() : 'N/A',
+      twoFactorEnabled: seller ? seller.twoFactorEnabled : 'N/A',
+      twoFactorType: seller ? typeof seller.twoFactorEnabled : 'N/A'
+    });
+    
+    if (!seller) {
+      return res.status(400).json({ 
+        message: 'Seller not found' 
+      });
+    }
+    
+    if (!seller.twoFactorEnabled) {
       return res.status(400).json({ 
         message: 'Seller must have 2FA enabled to receive buy requests' 
       });
