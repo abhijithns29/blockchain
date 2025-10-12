@@ -116,7 +116,7 @@ const landTransactionSchema = new mongoose.Schema({
   timeline: [{
     event: {
       type: String,
-      enum: ['INITIATED', 'DOCUMENTS_UPLOADED', 'REVIEW_STARTED', 'APPROVED', 'REJECTED', 'COMPLETED', 'CANCELLED'],
+      enum: ['INITIATED', 'DOCUMENTS_UPLOADED', 'REVIEW_STARTED', 'ADMIN_APPROVED', 'ADMIN_REJECTED', 'APPROVED', 'REJECTED', 'COMPLETED', 'CANCELLED'],
       required: true
     },
     timestamp: { type: Date, default: Date.now },

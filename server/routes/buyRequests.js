@@ -139,7 +139,11 @@ router.post('/:chatId/confirm', auth, async (req, res) => {
       storedCode: buyRequest.twoFactorCode,
       expiresAt: buyRequest.twoFactorExpiresAt,
       sellerId: buyRequest.seller._id,
-      requestUserId: req.user._id
+      requestUserId: req.user._id,
+      sellerIsPopulated: !!buyRequest.seller._id,
+      sellerType: typeof buyRequest.seller,
+      expectedSellerId: buyRequest.seller._id ? buyRequest.seller._id.toString() : buyRequest.seller.toString(),
+      actualUserId: req.user._id.toString()
     });
 
     // Verify user is the seller

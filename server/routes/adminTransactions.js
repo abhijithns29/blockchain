@@ -99,6 +99,7 @@ router.post('/:transactionId/approve', auth, requireAdmin, async (req, res) => {
 
     // Create land transaction record
     const landTransaction = new LandTransaction({
+      transactionId: `TXN${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
       landId: buyRequest.landId._id,
       seller: buyRequest.seller._id,
       buyer: buyRequest.buyer._id,
@@ -111,7 +112,8 @@ router.post('/:transactionId/approve', auth, requireAdmin, async (req, res) => {
         reviewDate: new Date(),
         comments: comments,
         documentsVerified: true,
-        legalClearance: true
+        legalClearance: true,
+        financialVerification: true
       },
       blockchainTxHash: blockchainTxHash,
       timeline: [{
@@ -119,7 +121,7 @@ router.post('/:transactionId/approve', auth, requireAdmin, async (req, res) => {
         timestamp: new Date(),
         performedBy: req.user._id,
         description: 'Transaction approved by admin',
-        details: comments
+        metadata: { comments }
       }]
     });
 

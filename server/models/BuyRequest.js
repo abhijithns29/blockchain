@@ -206,21 +206,26 @@ buyRequestSchema.methods.verifyTwoFactorCode = function(code) {
 };
 
 buyRequestSchema.methods.confirmBySeller = function(sellerId) {
+  // Extract the actual seller ID (handle both populated and non-populated cases)
+  const actualSellerId = this.seller._id ? this.seller._id.toString() : this.seller.toString();
+  const passedSellerIdStr = sellerId.toString();
+  
   console.log('confirmBySeller called:', {
     buyRequestId: this._id,
     currentStatus: this.status,
     buyRequestSeller: this.seller,
     passedSellerId: sellerId,
-    sellerToString: this.seller.toString(),
-    passedToString: sellerId.toString(),
-    areEqual: this.seller.toString() === sellerId.toString()
+    actualSellerId,
+    passedSellerIdStr,
+    areEqual: actualSellerId === passedSellerIdStr,
+    sellerIsPopulated: !!this.seller._id
   });
   
   if (this.status !== 'PENDING_SELLER_CONFIRMATION') {
     throw new Error('Buy request is not in pending seller confirmation status');
   }
   
-  if (this.seller.toString() !== sellerId.toString()) {
+  if (actualSellerId !== passedSellerIdStr) {
     throw new Error('Only the seller can confirm this buy request');
   }
   
