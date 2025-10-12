@@ -169,7 +169,8 @@ export interface LandTransaction {
 }
 
 export interface Chat {
-  id: string;
+  _id: string;
+  id?: string;
   landId: Land;
   buyer: User;
   seller: User;

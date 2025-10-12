@@ -11,6 +11,7 @@ import CardMedia from "@mui/material/CardMedia";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import { Box, Chip, Grid } from "@mui/material";
+import RealtimeChat from "./RealtimeChat";
 
 const Marketplace: React.FC = () => {
   const { auth } = useAuth();
@@ -58,6 +59,8 @@ const Marketplace: React.FC = () => {
   const [newAmenity, setNewAmenity] = useState("");
   const [selectedLandView, setSelectedLandView] = useState<Land | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedLandForChat, setSelectedLandForChat] = useState<Land | null>(null);
+  const [showChatModal, setShowChatModal] = useState(false);
 
   useEffect(() => {
     if (activeTab === "marketplace") {
@@ -233,6 +236,11 @@ const Marketplace: React.FC = () => {
     console.log("Amenities:", land.marketInfo?.nearbyAmenities);
     setSelectedLandView(land);
     setShowDetailModal(true);
+  };
+
+  const handleChatWithOwner = (land: Land) => {
+    setSelectedLandForChat(land);
+    setShowChatModal(true);
   };
 
   return (
@@ -568,6 +576,7 @@ const Marketplace: React.FC = () => {
                             variant="outlined"
                             sx={{ flex: 1 }}
                             title="Chat with owner"
+                            onClick={() => handleChatWithOwner(land)}
                           >
                             💬 Chat
                           </Button>
@@ -805,6 +814,46 @@ const Marketplace: React.FC = () => {
           land={selectedLandView}
           onClose={() => setShowDetailModal(false)}
         />
+      )}
+
+      {/* Chat Modal */}
+      {showChatModal && selectedLandForChat && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-4xl h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h2 className="text-xl font-bold text-gray-900">
+                Chat with {selectedLandForChat.currentOwner?.fullName || 'Land Owner'}
+              </h2>
+              <button
+                onClick={() => setShowChatModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <RealtimeChat
+                landId={selectedLandForChat._id || selectedLandForChat.id}
+                recipientId={selectedLandForChat.currentOwner?.id}
+                recipientName={selectedLandForChat.currentOwner?.fullName}
+                onClose={() => setShowChatModal(false)}
+                showHeader={false}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -8,6 +8,7 @@ function AppContent() {
   const { auth } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [landId, setLandId] = useState('');
+  const [chatNavigation, setChatNavigation] = useState<{landId: string, sellerId: string, isFirstChat?: boolean} | null>(null);
 
   // Show loading spinner while authentication is being checked
   if (auth.loading) {
@@ -29,17 +30,42 @@ function AppContent() {
     setCurrentPage('land-details');
   };
 
-  const navigateToDashboard = () => {
+  const navigateToDashboard = (tab?: string, landId?: string, sellerId?: string) => {
     setCurrentPage('dashboard');
+    // If coming from land details with specific chat info
+    if (tab && landId && sellerId) {
+      setChatNavigation({ landId, sellerId, activeTab: tab });
+    } else if (tab) {
+      setChatNavigation({ landId: '', sellerId: '', activeTab: tab });
+    }
+  };
+
+  const navigateToChat = (landId: string, sellerId: string, isFirstChat?: boolean) => {
+    setChatNavigation({ landId, sellerId, isFirstChat });
+    setCurrentPage('dashboard');
+  };
+
+  // Clear chat navigation after it's been used
+  const clearChatNavigation = () => {
+    setChatNavigation(null);
   };
 
   // Show different pages based on current page state
   if (currentPage === 'land-details') {
-    return <LandDetailPage landId={landId} onBack={navigateToDashboard} />;
+    return <LandDetailPage 
+      landId={landId} 
+      onBack={navigateToDashboard} 
+      onNavigateToChat={navigateToChat}
+    />;
   }
 
   // Show dashboard with navigation capability
-  return <Dashboard onNavigateToLand={navigateToLandDetails} />;
+  return <Dashboard 
+    onNavigateToLand={navigateToLandDetails}
+    initialTab={chatNavigation ? "chats" : undefined}
+    chatNavigation={chatNavigation || undefined}
+    onClearChatNavigation={clearChatNavigation}
+  />;
 }
 
 function App() {

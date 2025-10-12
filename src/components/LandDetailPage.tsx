@@ -17,19 +17,22 @@ import {
 import { Land } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import apiService from '../services/api';
+import RealtimeChat from './RealtimeChat';
 
 interface LandDetailPageProps {
   landId: string;
-  onBack?: () => void;
+  onBack?: (tab?: string, landId?: string, sellerId?: string) => void;
+  onNavigateToChat?: (landId: string, sellerId: string, isFirstChat?: boolean) => void;
 }
 
-const LandDetailPage: React.FC<LandDetailPageProps> = ({ landId, onBack }) => {
+const LandDetailPage: React.FC<LandDetailPageProps> = ({ landId, onBack, onNavigateToChat }) => {
   const { auth } = useAuth();
   const [land, setLand] = useState<Land | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isLiked, setIsLiked] = useState(false);
+  const [showChatModal, setShowChatModal] = useState(false);
 
   useEffect(() => {
     loadLandDetails();
@@ -59,8 +62,19 @@ const LandDetailPage: React.FC<LandDetailPageProps> = ({ landId, onBack }) => {
   };
 
   const handleChat = () => {
-    // Navigate to chat or open chat modal
-    console.log('Start chat with seller');
+    console.log('Chat button clicked');
+    console.log('Land data:', land);
+    console.log('Current owner:', land?.currentOwner);
+    console.log('Owner ID:', land?.currentOwner?.id);
+    console.log('Owner _id:', land?.currentOwner?._id);
+    
+    // Show chat modal instead of redirecting - use _id instead of id
+    if (land && (land.currentOwner?.id || land.currentOwner?._id)) {
+      console.log('Opening chat modal');
+      setShowChatModal(true);
+    } else {
+      console.error('Cannot open chat - missing land or owner data');
+    }
   };
 
   const handleBuyNow = () => {
@@ -111,7 +125,17 @@ const LandDetailPage: React.FC<LandDetailPageProps> = ({ landId, onBack }) => {
     return `http://localhost:5000/api/images/${imageHash}`;
   };
 
-  const isOwner = auth.user?.id === land?.currentOwner?.id;
+  const isOwner = auth.user?.id === land?.currentOwner?.id || auth.user?.id === land?.currentOwner?._id;
+  
+  // Debug logging
+  console.log('Land detail page debug:', {
+    authUserId: auth.user?.id,
+    landOwnerId: land?.currentOwner?.id,
+    landOwner_Id: land?.currentOwner?._id,
+    isOwner,
+    land: !!land,
+    currentOwner: !!land?.currentOwner
+  });
 
   if (loading) {
     return (
@@ -465,6 +489,47 @@ const LandDetailPage: React.FC<LandDetailPageProps> = ({ landId, onBack }) => {
           )}
         </div>
       </div>
+
+      {/* Chat Modal */}
+      {console.log('Modal render check:', { showChatModal, land: !!land })}
+      {showChatModal && land && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-4xl h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h2 className="text-xl font-bold text-gray-900">
+                Chat with {land.currentOwner?.fullName || 'Land Owner'}
+              </h2>
+              <button
+                onClick={() => setShowChatModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <RealtimeChat
+                landId={land._id || land.id}
+                recipientId={land.currentOwner?.id || land.currentOwner?._id}
+                recipientName={land.currentOwner?.fullName}
+                onClose={() => setShowChatModal(false)}
+                showHeader={false}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
