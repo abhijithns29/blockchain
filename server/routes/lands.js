@@ -1621,4 +1621,50 @@ router.use((req, res, next) => {
   next();
 });
 
+// Download ownership document
+router.get("/:landId/download-document", auth, async (req, res) => {
+  try {
+    const { landId } = req.params;
+
+    const land = await Land.findById(landId);
+    if (!land) {
+      return res.status(404).json({ message: "Land not found" });
+    }
+
+    // Check if user is the current owner
+    if (land.currentOwner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "You can only download documents for lands you own" });
+    }
+
+    if (!land.digitalDocument) {
+      return res.status(404).json({ message: "No digital document available for this land" });
+    }
+
+    // In a real implementation, this would generate and serve the PDF
+    // For now, we'll return the document information
+    res.json({
+      message: "Document download initiated",
+      document: {
+        url: land.digitalDocument.url,
+        hash: land.digitalDocument.hash,
+        generatedAt: land.digitalDocument.generatedAt,
+        verifiedBy: land.digitalDocument.verifiedBy
+      },
+      land: {
+        assetId: land.assetId,
+        surveyNumber: land.surveyNumber,
+        village: land.village,
+        district: land.district,
+        state: land.state,
+        area: land.area,
+        landType: land.landType
+      },
+      owner: req.user
+    });
+  } catch (error) {
+    console.error("Download document error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 module.exports = router;

@@ -165,7 +165,9 @@ app.use("/api/lands", require("./routes/lands"));
 app.use("/api/land-transactions", require("./routes/landTransactions"));
 app.use("/api/chats", require("./routes/chat"));
 app.use("/api/audit", require("./routes/audit"));
-app.use("/api/2fa", require("./routes/twoFactorRoutes")); // Add this line
+app.use("/api/2fa", require("./routes/twoFactorRoutes"));
+app.use("/api/buy-requests", require("./routes/buyRequests"));
+app.use("/api/admin/transactions", require("./routes/adminTransactions"));
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {

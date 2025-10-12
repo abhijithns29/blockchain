@@ -115,22 +115,6 @@ class ApiService {
     });
   }
 
-  async getPendingTransactions() {
-    return this.request('/transactions/pending');
-  }
-
-  async approveTransaction(id: string) {
-    return this.request(`/transactions/${id}/approve`, {
-      method: 'PUT',
-    });
-  }
-
-  async rejectTransaction(id: string, reason: string) {
-    return this.request(`/transactions/${id}/reject`, {
-      method: 'PUT',
-      body: JSON.stringify({ reason }),
-    });
-  }
 
   async getPropertyTransactions(propertyId: string) {
     return this.request(`/transactions/property/${propertyId}`);
@@ -393,6 +377,58 @@ class ApiService {
     return this.request(`/chats/${chatId}/accept`, {
       method: 'POST',
     });
+  }
+
+  // ==================== BUY REQUESTS ====================
+  async createBuyRequest(requestData: {
+    chatId: string;
+    landId: string;
+    sellerId: string;
+    buyerId: string;
+    agreedPrice: number;
+  }) {
+    return this.request('/buy-requests', {
+      method: 'POST',
+      body: JSON.stringify(requestData),
+    });
+  }
+
+  async confirmBuyRequest(chatId: string, twoFactorCode?: string) {
+    return this.request(`/buy-requests/${chatId}/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({ twoFactorCode }),
+    });
+  }
+
+  async getBuyRequest(chatId: string) {
+    return this.request(`/buy-requests/${chatId}`);
+  }
+
+  // ==================== ADMIN TRANSACTIONS ====================
+  async getPendingTransactions() {
+    return this.request('/admin/transactions/pending');
+  }
+
+  async approveTransaction(transactionId: string) {
+    return this.request(`/admin/transactions/${transactionId}/approve`, {
+      method: 'POST',
+    });
+  }
+
+  async rejectTransaction(transactionId: string, reason: string) {
+    return this.request(`/admin/transactions/${transactionId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  async getTransactionDetails(transactionId: string) {
+    return this.request(`/admin/transactions/${transactionId}`);
+  }
+
+  // ==================== DOCUMENT DOWNLOAD ====================
+  async downloadOwnershipDocument(landId: string) {
+    return this.request(`/lands/${landId}/download-document`);
   }
 
   // ==================== LAND TRANSACTIONS ====================

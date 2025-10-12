@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Phone, Video, MoreVertical, X, DollarSign, Check, X as XIcon } from 'lucide-react';
+import { Send, Phone, Video, MoreVertical, X, DollarSign, Check, X as XIcon, Eye } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import apiService from '../services/api';
 import io, { Socket } from 'socket.io-client';
@@ -57,6 +57,9 @@ const RealtimeChat: React.FC<RealtimeChatProps> = ({
   const [showOfferInput, setShowOfferInput] = useState(false);
   const [offerAmount, setOfferAmount] = useState('');
   const [currentOffer, setCurrentOffer] = useState<any>(null);
+  const [buyRequestStatus, setBuyRequestStatus] = useState<'NONE' | 'PENDING' | 'CONFIRMED' | 'COMPLETED'>('NONE');
+  const [showTwoFactorModal, setShowTwoFactorModal] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -227,6 +230,9 @@ const RealtimeChat: React.FC<RealtimeChatProps> = ({
             }
           }
         }
+
+        // Load existing buy request status
+        await loadExistingBuyRequest(chatData.chat._id);
       } else {
         setError('No chat data received');
       }
@@ -414,6 +420,131 @@ const RealtimeChat: React.FC<RealtimeChatProps> = ({
       isUserSeller
     });
     return isUserSeller;
+  };
+
+  // Buy request functions
+  const initiateBuyRequest = async () => {
+    try {
+      if (!chat || !currentOffer) return;
+
+      const chatId = chat._id;
+      console.log('Initiating buy request:', { 
+        chatId, 
+        offerAmount: currentOffer.amount,
+        landId: chat.landId,
+        sellerId: chat.seller?._id,
+        buyerId: chat.buyer?._id
+      });
+
+      // Call API to create buy request
+      const requestData = {
+        chatId,
+        landId: typeof chat.landId === 'object' && chat.landId ? (chat.landId as any)._id : chat.landId,
+        sellerId: chat.seller._id,
+        buyerId: chat.buyer._id,
+        agreedPrice: currentOffer.amount
+      };
+      
+      console.log('Sending buy request with data:', requestData);
+      const response = await apiService.createBuyRequest(requestData);
+      console.log('Buy request created:', response);
+      
+        setBuyRequestStatus('PENDING');
+
+      // Add message to chat
+      const messageData = {
+        message: `Buy request initiated for ₹${currentOffer.amount.toLocaleString()}`,
+        messageType: 'BUY_REQUEST'
+      };
+      console.log('Sending buy request message:', messageData);
+      await apiService.sendMessage(chatId, messageData);
+
+    } catch (error: any) {
+      console.error('Error creating buy request:', error);
+      
+      // Handle specific error cases
+      if (error.message && error.message.includes('already exists')) {
+        // Buy request already exists, load it instead
+        console.log('Buy request already exists, loading existing request...');
+        await loadExistingBuyRequest(chatId || '');
+        setError('Buy request already exists for this chat. Loading existing request...');
+        setTimeout(() => setError(''), 3000); // Clear error after 3 seconds
+      } else {
+        setError(error.message || 'Failed to initiate buy request');
+      }
+    }
+  };
+
+  const confirmBuyRequest = async () => {
+    try {
+      if (!chat) return;
+
+      // Show 2FA modal
+      console.log('Showing 2FA modal');
+      setShowTwoFactorModal(true);
+      setError('');
+
+    } catch (error: any) {
+      console.error('Error showing 2FA modal:', error);
+      setError(error.message || 'Failed to open 2FA modal');
+    }
+  };
+
+  const handleTwoFactorSubmit = async () => {
+    try {
+      if (!chat) return;
+
+      // If 2FA code is empty, show error
+      if (!twoFactorCode.trim()) {
+        setError('Please enter a valid 2FA code');
+        return;
+      }
+
+      const chatId = chat._id;
+      console.log('Confirming buy request with 2FA:', chatId, twoFactorCode);
+
+      // Call API to confirm buy request with 2FA code
+      const response = await apiService.confirmBuyRequest(chatId, twoFactorCode);
+      console.log('Buy request confirmed:', response);
+      
+      setBuyRequestStatus('CONFIRMED');
+      setShowTwoFactorModal(false);
+      setTwoFactorCode('');
+      setError('');
+
+    } catch (error: any) {
+      console.error('Error confirming buy request:', error);
+      
+      // Handle specific 2FA errors
+      if (error.message && error.message.includes('Invalid or expired')) {
+        setError('Invalid or expired 2FA code. Please try again.');
+        setTwoFactorCode(''); // Clear the invalid code
+      } else {
+        setError(error.message || 'Failed to confirm buy request');
+      }
+    }
+  };
+
+  const closeTwoFactorModal = () => {
+    setShowTwoFactorModal(false);
+    setTwoFactorCode('');
+    setError('');
+  };
+
+  const loadExistingBuyRequest = async (chatId: string) => {
+    try {
+      console.log('Loading existing buy request for chat:', chatId);
+      const response = await apiService.getBuyRequest(chatId);
+      if (response.buyRequest) {
+        console.log('Existing buy request found:', response.buyRequest);
+        setBuyRequestStatus(response.buyRequest.status === 'PENDING_SELLER_CONFIRMATION' ? 'PENDING' : 
+                           response.buyRequest.status === 'PENDING_ADMIN_APPROVAL' ? 'CONFIRMED' : 
+                           response.buyRequest.status === 'APPROVED' ? 'COMPLETED' : 'NONE');
+      }
+    } catch (error: any) {
+      // It's okay if no buy request exists yet
+      console.log('No existing buy request found for chat:', chatId);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -769,11 +900,89 @@ const RealtimeChat: React.FC<RealtimeChatProps> = ({
         </div>
       )}
 
+      {/* Buy Request Actions (for buyer after offer accepted) */}
+      {currentOffer && currentOffer.status === 'ACCEPTED' && isBuyer() && buyRequestStatus === 'NONE' && (
+        <div className="p-4 border-t bg-blue-50">
+          <div className="text-center mb-3">
+            <p className="text-sm text-gray-700">
+              Offer accepted! Ready to proceed with purchase?
+            </p>
+          </div>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={initiateBuyRequest}
+              className="px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <DollarSign className="w-4 h-4" />
+              Initiate Buy Request
+            </button>
+            <button
+              onClick={() => loadExistingBuyRequest(chat?._id || '')}
+              className="px-4 py-2 bg-gray-500 text-white rounded-full hover:bg-gray-600 transition-colors flex items-center justify-center gap-2"
+              title="Check for existing buy request"
+            >
+              <Eye className="w-4 h-4" />
+              Check Status
+            </button>
+            <button
+              onClick={() => setBuyRequestStatus('NONE')}
+              className="px-3 py-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
+              title="Reset buy request status (for testing)"
+            >
+              <X className="w-4 h-4" />
+              Reset
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Buy Request Status (for seller) */}
+      {buyRequestStatus === 'PENDING' && isSeller() && (
+        <div className="p-4 border-t bg-orange-50">
+          <div className="text-center mb-3">
+            <p className="text-sm text-gray-700">
+              <strong>Buy request pending</strong> your confirmation
+            </p>
+          </div>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={confirmBuyRequest}
+              className="px-6 py-2 bg-orange-600 text-white rounded-full hover:bg-orange-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <Check className="w-4 h-4" />
+              Confirm Buy Request
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction Status */}
+      {buyRequestStatus === 'CONFIRMED' && (
+        <div className="p-4 border-t bg-purple-50">
+          <div className="text-center">
+            <p className="text-sm text-gray-700">
+              <strong>Transaction submitted</strong> to admin for approval
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Buy Request Already Exists */}
+      {buyRequestStatus === 'PENDING' && isBuyer() && (
+        <div className="p-4 border-t bg-blue-50">
+          <div className="text-center">
+            <p className="text-sm text-gray-700">
+              <strong>Buy request already exists</strong> and is pending seller confirmation
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Message Input */}
       <div className="p-4 border-t bg-gray-50">
         <div className="flex gap-2">
-          {/* Offer button for buyers */}
-          {isBuyer() && !showOfferInput && (
+          {/* Offer button for buyers - only show if no accepted offer */}
+          {isBuyer() && !showOfferInput && (!currentOffer || currentOffer.status !== 'ACCEPTED') && (
             <button
               onClick={() => setShowOfferInput(true)}
               className="px-3 py-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors flex items-center justify-center"
@@ -804,6 +1013,61 @@ const RealtimeChat: React.FC<RealtimeChatProps> = ({
           </button>
         </div>
       </div>
+
+      {/* 2FA Modal */}
+      {showTwoFactorModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <div className="text-center">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">
+                Two-Factor Authentication
+              </h2>
+              <p className="text-sm text-gray-600 mb-6">
+                Please enter the 6-digit code from your authenticator app (Google Authenticator, Authy, etc.) to confirm the buy request.
+              </p>
+              
+              <div className="mb-6">
+                <input
+                  type="text"
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleTwoFactorSubmit();
+                    }
+                  }}
+                  placeholder="Enter 6-digit code"
+                  maxLength={6}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg text-center text-xl font-mono focus:ring-orange-500 focus:border-orange-500"
+                  autoFocus
+                />
+              </div>
+
+              {error && (
+                <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={closeTwoFactorModal}
+                  className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleTwoFactorSubmit}
+                  className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

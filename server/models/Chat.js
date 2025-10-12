@@ -34,7 +34,7 @@ const chatSchema = new mongoose.Schema({
     },
     messageType: {
       type: String,
-      enum: ['TEXT', 'OFFER', 'COUNTER_OFFER', 'ACCEPTANCE', 'REJECTION', 'SYSTEM'],
+      enum: ['TEXT', 'OFFER', 'COUNTER_OFFER', 'ACCEPTANCE', 'REJECTION', 'BUY_REQUEST', 'SYSTEM'],
       default: 'TEXT'
     },
     offerAmount: {

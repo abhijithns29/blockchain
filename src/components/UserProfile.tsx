@@ -17,6 +17,7 @@ import {
   ShoppingCart,
   Scissors,
   Settings,
+  Download,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import QRCode from "qrcode";
@@ -129,6 +130,24 @@ const UserProfile: React.FC = () => {
     setShowListingForm(false);
     setSelectedLand(null);
     fetchOwnedLands(); // Refresh the owned lands list
+  };
+
+  const handleDownloadDocument = async (landId: string) => {
+    try {
+      setLoading(true);
+      const response = await apiService.downloadOwnershipDocument(landId);
+      
+      // In a real implementation, this would trigger a file download
+      // For now, we'll show the document information
+      alert(`Document download initiated!\n\nDocument URL: ${response.document.url}\nDocument Hash: ${response.document.hash}`);
+      
+      // You could also open the document in a new tab
+      // window.open(response.document.url, '_blank');
+    } catch (error: any) {
+      setError(error.message || 'Failed to download document');
+    } finally {
+      setLoading(false);
+    }
   };
 
 
@@ -654,6 +673,15 @@ const UserProfile: React.FC = () => {
                               <Eye className="h-4 w-4 mr-1" />
                               View Details
                             </button>
+                            {land.digitalDocument && (
+                              <button 
+                                onClick={() => handleDownloadDocument(land._id)}
+                                className="inline-flex items-center text-green-600 hover:text-green-800 text-sm"
+                              >
+                                <Download className="h-4 w-4 mr-1" />
+                                Download Document
+                              </button>
+                            )}
                           </div>
 
                           {land.status !== "FOR_SALE" && (

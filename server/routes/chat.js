@@ -132,6 +132,14 @@ router.post('/:chatId/message', auth, async (req, res) => {
   try {
     const { message, messageType = 'TEXT', offerAmount } = req.body;
     
+    console.log('Message endpoint called:', { 
+      chatId: req.params.chatId, 
+      message, 
+      messageType, 
+      offerAmount,
+      userId: req.user._id 
+    });
+    
     const chat = await Chat.findById(req.params.chatId);
     if (!chat) {
       return res.status(404).json({ message: 'Chat not found' });

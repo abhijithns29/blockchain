@@ -26,6 +26,7 @@ import { Chat } from "../types";
 import QRScanner from "./QRScanner";
 import TwoFactorAuth from "./TwoFactorAuth";
 import AuditorDashboard from "./AuditorDashboard";
+import AdminTransactionDashboard from "./AdminTransactionDashboard";
 
 interface DashboardProps {
   onNavigateToLand?: (landId: string) => void;
@@ -397,7 +398,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToLand, initialTab, ini
       case "profile":
         return <UserProfile />;
       case "admin":
-        return auth.user?.role === "ADMIN" ? <AdminPanel /> : null;
+        return auth.user?.role === "ADMIN" ? (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h1 className="text-2xl font-bold text-gray-900">Admin Panel</h1>
+            </div>
+            <AdminTransactionDashboard />
+            <AdminPanel />
+          </div>
+        ) : null;
       case "auditor":
         return auth.user?.role === "AUDITOR" ? <AuditorDashboard /> : null;
       case "verification":

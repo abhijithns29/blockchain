@@ -231,12 +231,22 @@ userSchema.methods.generateTwoFactorSecret = function () {
 };
 
 userSchema.methods.verifyTwoFactorToken = function (token) {
-  return speakeasy.totp.verify({
+  console.log('User.verifyTwoFactorToken called:', {
+    userId: this._id,
+    token,
+    hasSecret: !!this.twoFactorSecret,
+    secretLength: this.twoFactorSecret ? this.twoFactorSecret.length : 0
+  });
+  
+  const result = speakeasy.totp.verify({
     secret: this.twoFactorSecret,
     encoding: "base32",
     token,
     window: 2,
   });
+  
+  console.log('speakeasy.totp.verify result:', result);
+  return result;
 };
 
 userSchema.methods.incrementLoginAttempts = function () {
