@@ -396,7 +396,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToLand, initialTab, ini
       case "transactions":
         return <TransactionHistory />;
       case "profile":
-        return <UserProfile />;
+        return <UserProfile onNavigateToLand={onNavigateToLand} />;
       case "admin":
         return auth.user?.role === "ADMIN" ? (
           <div className="space-y-6">

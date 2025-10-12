@@ -169,6 +169,32 @@ app.use("/api/2fa", require("./routes/twoFactorRoutes"));
 app.use("/api/buy-requests", require("./routes/buyRequests"));
 app.use("/api/admin/transactions", require("./routes/adminTransactions"));
 
+// Serve PDF documents
+app.get("/api/documents/:filename", (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(__dirname, "uploads", filename);
+  
+  // Check if file exists
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: "Document not found" });
+  }
+  
+  // Set headers for PDF download/viewing
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+  
+  // Stream the file
+  const fileStream = fs.createReadStream(filePath);
+  fileStream.pipe(res);
+  
+  fileStream.on('error', (error) => {
+    console.error('Error streaming document:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Error serving document' });
+    }
+  });
+});
+
 // Health check endpoint
 app.get("/api/health", (req, res) => {
   res.json({

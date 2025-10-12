@@ -24,7 +24,11 @@ import QRCode from "qrcode";
 import apiService from "../services/api";
 import LandListingForm from "./LandListingForm";
 
-const UserProfile: React.FC = () => {
+interface UserProfileProps {
+  onNavigateToLand?: (landId: string) => void;
+}
+
+const UserProfile: React.FC<UserProfileProps> = ({ onNavigateToLand }) => {
   const { auth } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -132,19 +136,93 @@ const UserProfile: React.FC = () => {
     fetchOwnedLands(); // Refresh the owned lands list
   };
 
+  const handleViewDetails = (landId: string) => {
+    if (onNavigateToLand) {
+      onNavigateToLand(landId);
+    } else {
+      console.warn('Navigation function not provided');
+    }
+  };
+
   const handleDownloadDocument = async (landId: string) => {
     try {
       setLoading(true);
-      const response = await apiService.downloadOwnershipDocument(landId);
       
-      // In a real implementation, this would trigger a file download
-      // For now, we'll show the document information
-      alert(`Document download initiated!\n\nDocument URL: ${response.document.url}\nDocument Hash: ${response.document.hash}`);
+      // Create a temporary link to download the PDF
+      const token = localStorage.getItem('token');
+      const downloadUrl = `http://localhost:5000/api/lands/${landId}/download-document`;
       
-      // You could also open the document in a new tab
-      // window.open(response.document.url, '_blank');
+      // Create a temporary anchor element to trigger download
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `land_document_${landId}.pdf`;
+      
+      // Add authorization header by creating a fetch request first
+      const response = await fetch(downloadUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to download document');
+      }
+      
+      // Get the blob and create a download URL
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      // Trigger download
+      link.href = blobUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up the blob URL
+      window.URL.revokeObjectURL(blobUrl);
+      
     } catch (error: any) {
       setError(error.message || 'Failed to download document');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadOriginalDocument = async (landId: string) => {
+    try {
+      setLoading(true);
+      
+      const token = localStorage.getItem('token');
+      const downloadUrl = `http://localhost:5000/api/lands/${landId}/download-original-document`;
+      
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `original_document_${landId}.pdf`;
+      
+      const response = await fetch(downloadUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to download original document');
+      }
+      
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      link.href = blobUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      window.URL.revokeObjectURL(blobUrl);
+      
+    } catch (error: any) {
+      setError(error.message || 'Failed to download original document');
     } finally {
       setLoading(false);
     }
@@ -658,18 +736,28 @@ const UserProfile: React.FC = () => {
                           </div>
                         )}
 
-                        {land.marketInfo?.askingPrice && (
-                          <div className="flex items-center">
-                            <DollarSign className="h-4 w-4 mr-1" />
-                            <span className="font-medium">
-                              ₹{land.marketInfo.askingPrice.toLocaleString()}
-                            </span>
-                          </div>
-                        )}
+                        {/* Document Information */}
+                        <div className="space-y-1">
+                          {land.originalDocument && (
+                            <div className="flex items-center text-sm text-gray-600">
+                              <Download className="h-3 w-3 mr-1" />
+                              <span>Original Doc: {land.originalDocument.filename || 'Available'}</span>
+                            </div>
+                          )}
+                          {land.digitalDocument && (
+                            <div className="flex items-center text-sm text-green-600">
+                              <Download className="h-3 w-3 mr-1" />
+                              <span>Digitized Doc: Available</span>
+                            </div>
+                          )}
+                        </div>
 
                         <div className="pt-2 space-y-2">
-                          <div className="flex space-x-2">
-                            <button className="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm">
+                          <div className="flex flex-wrap gap-2">
+                            <button 
+                              onClick={() => handleViewDetails(land._id)}
+                              className="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm"
+                            >
                               <Eye className="h-4 w-4 mr-1" />
                               View Details
                             </button>
@@ -679,7 +767,16 @@ const UserProfile: React.FC = () => {
                                 className="inline-flex items-center text-green-600 hover:text-green-800 text-sm"
                               >
                                 <Download className="h-4 w-4 mr-1" />
-                                Download Document
+                                Download Digitized Doc
+                              </button>
+                            )}
+                            {land.originalDocument && (
+                              <button 
+                                onClick={() => handleDownloadOriginalDocument(land._id)}
+                                className="inline-flex items-center text-gray-600 hover:text-gray-800 text-sm"
+                              >
+                                <Download className="h-4 w-4 mr-1" />
+                                Download Original Doc
                               </button>
                             )}
                           </div>

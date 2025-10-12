@@ -104,13 +104,6 @@ const LandDetailPage: React.FC<LandDetailPageProps> = ({ landId, onBack, onNavig
     }
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0
-    }).format(price);
-  };
 
   const formatArea = (land: Land) => {
     const { acres, guntas, sqft } = land.area || {};
@@ -253,36 +246,30 @@ const LandDetailPage: React.FC<LandDetailPageProps> = ({ landId, onBack, onNavig
 
         {/* Details Sidebar */}
         <div className="space-y-6">
-          {/* Price and Actions */}
+          {/* Actions */}
           <div className="bg-white rounded-lg shadow-sm border p-6">
-            <div className="mb-4">
-              <h2 className="text-3xl font-bold text-green-600 mb-2">
-                {land.marketInfo?.askingPrice ? formatPrice(land.marketInfo.askingPrice) : 'Price on request'}
-              </h2>
-              {land.marketInfo?.pricePerSqft && (
-                <p className="text-gray-600">
-                  ₹{land.marketInfo.pricePerSqft.toLocaleString()} per sqft
-                </p>
-              )}
-            </div>
 
             {isOwner ? (
               // Owner actions
               <div className="space-y-3">
-                <button
-                  onClick={handleEdit}
-                  className="w-full flex items-center justify-center gap-2 py-3 px-4 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
-                >
-                  <Edit2 className="w-5 h-5" />
-                  Edit Listing
-                </button>
-                <button
-                  onClick={handleRemove}
-                  className="w-full flex items-center justify-center gap-2 py-3 px-4 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                >
-                  <Trash2 className="w-5 h-5" />
-                  Remove Listing
-                </button>
+                {land.status === "FOR_SALE" && (
+                  <button
+                    onClick={handleEdit}
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+                  >
+                    <Edit2 className="w-5 h-5" />
+                    Edit Listing
+                  </button>
+                )}
+                {land.status === "FOR_SALE" && (
+                  <button
+                    onClick={handleRemove}
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                    Remove Listing
+                  </button>
+                )}
               </div>
             ) : (
               // Buyer actions

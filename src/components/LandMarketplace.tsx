@@ -673,26 +673,30 @@ const LandCard: React.FC<LandCardProps> = ({
           {activeTab === 'my-ads' || isOwner ? (
             // Owner actions
             <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit(land);
-                }}
-                className="flex-1 flex items-center justify-center gap-2 py-2 px-4 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
-              >
-                <Edit2 className="w-4 h-4" />
-                Edit
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemove(land);
-                }}
-                className="flex-1 flex items-center justify-center gap-2 py-2 px-4 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                Remove
-              </button>
+              {land.status === "FOR_SALE" && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(land);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2 px-4 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit
+                </button>
+              )}
+              {land.status === "FOR_SALE" && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(land);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2 px-4 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Remove
+                </button>
+              )}
             </>
           ) : (
             // Buyer actions - only show if user is not the owner
